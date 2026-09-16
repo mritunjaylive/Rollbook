@@ -1,0 +1,47 @@
+# ─── Dependencies ────────────────────────────────────────────────────────────
+node_modules/
+
+# ─── Build output ─────────────────────────────────────────────────────────────
+dist/
+.vercel/output/
+
+# ─── Environment / secrets ────────────────────────────────────────────────────
+# Never commit real env files — use .env.example as the template
+.env
+.env.*
+!.env.example
+
+# ─── Sandbox-internal files (Grok App Builder) ────────────────────────────────
+.grok/
+.project_id
+.node_modules.lock
+startup.sh
+AGENTS.md
+artifacts/
+
+# ─── QA screenshots (generated at runtime) ───────────────────────────────────
+screenshots/*.png
+screenshots/*.jpg
+screenshots/*.json
+# keep the directory itself so CI can write into it
+!screenshots/.gitkeep
+
+# ─── Framework / tooling caches ───────────────────────────────────────────────
+.tanstack/
+.nitro/
+.output/
+
+# TanStack Router auto-generated file — regenerated on every dev/build run
+src/routeTree.gen.ts
+
+# ─── OS / editor noise ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
