@@ -38,6 +38,7 @@ type SubjectRow = {
   name: string;
   code: string | null;
   default_teacher: string | null;
+  description: string | null;
   closed: boolean;
 };
 type PeriodRow = {
@@ -91,6 +92,7 @@ function mapSubject(r: SubjectRow): Subject {
     name: r.name,
     code: r.code,
     defaultTeacher: r.default_teacher,
+    description: r.description,
     closed: Boolean(r.closed),
   };
 }
@@ -140,7 +142,7 @@ export const getSnapshot = createServerFn({ method: "GET" })
       await Promise.all([
         sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent from profiles where user_id = ${uid}`,
         sql<SemesterRow>`select id, course_name, semester_name, start_date, is_active, classes_over from semesters where user_id = ${uid} order by created_at desc`,
-        sql<SubjectRow>`select id, semester_id, name, code, default_teacher, closed from subjects where user_id = ${uid} order by created_at`,
+        sql<SubjectRow>`select id, semester_id, name, code, default_teacher, description, closed from subjects where user_id = ${uid} order by created_at`,
         sql<PeriodRow>`select id, semester_id, subject_id, day_of_week, period_number, start_time, end_time, teacher_name from periods where user_id = ${uid} order by day_of_week, period_number`,
         sql<AttendanceRow>`select id, period_id, date, status from attendance where user_id = ${uid}`,
         sql<CreditRow>`select id, subject_id, amount, type, teacher_name, granted_on, note from credit_grants where user_id = ${uid} order by granted_on desc`,
@@ -249,6 +251,7 @@ const subjectInput = z.object({
   name: z.string().trim().min(1).max(120),
   code: z.string().trim().max(40).optional().nullable(),
   defaultTeacher: z.string().trim().max(120).optional().nullable(),
+  description: z.string().trim().max(500).optional().nullable(),
 });
 
 export const upsertSubject = createServerFn({ method: "POST" })
@@ -260,16 +263,17 @@ export const upsertSubject = createServerFn({ method: "POST" })
     const id = data.id ?? newId();
     const code = data.code || null;
     const teacher = data.defaultTeacher || null;
+    const description = data.description || null;
     if (data.id) {
       await sql`
         update subjects
-        set name = ${data.name}, code = ${code}, default_teacher = ${teacher}
+        set name = ${data.name}, code = ${code}, default_teacher = ${teacher}, description = ${description}
         where id = ${id} and user_id = ${uid}
       `;
     } else {
       await sql`
-        insert into subjects (id, user_id, semester_id, name, code, default_teacher)
-        values (${id}, ${uid}, ${data.semesterId}, ${data.name}, ${code}, ${teacher})
+        insert into subjects (id, user_id, semester_id, name, code, default_teacher, description)
+        values (${id}, ${uid}, ${data.semesterId}, ${data.name}, ${code}, ${teacher}, ${description})
       `;
     }
     return { id };
@@ -456,6 +460,67 @@ export const addCreditGrant = createServerFn({ method: "POST" })
     return { id };
   });
 
+const archiveRoutineInput = z.object({
+  semesterId: z.string(),
+  newSemesterName: z.string().trim().min(1).max(80),
+});
+
+/**
+ * Archives the current semester's routine by:
+ * 1. Marking the current semester inactive and classesOver=true
+ * 2. Creating a new semester (same courseName, new semesterName) as active
+ * 3. Copying all subjects across (no periods — blank slate for the new routine)
+ * Returns the new semester id and a map of old→new subject ids.
+ */
+export const archiveRoutine = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: unknown) => archiveRoutineInput.parse(d))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const uid = context.userId;
+
+    // Fetch current semester
+    const [sem] = await sql<SemesterRow>`
+      select id, course_name, semester_name, start_date, is_active, classes_over
+      from semesters where id = ${data.semesterId} and user_id = ${uid}
+    `;
+    if (!sem) throw new Error("Semester not found.");
+
+    // Fetch subjects for this semester
+    const subjects = await sql<SubjectRow>`
+      select id, semester_id, name, code, default_teacher, description, closed
+      from subjects where semester_id = ${data.semesterId} and user_id = ${uid}
+      order by created_at
+    `;
+
+    // Archive old semester
+    await sql`
+      update semesters
+      set is_active = false, classes_over = true
+      where id = ${data.semesterId} and user_id = ${uid}
+    `;
+
+    // Create new active semester
+    const newSemId = newId();
+    await sql`
+      insert into semesters (id, user_id, course_name, semester_name, start_date, is_active)
+      values (${newSemId}, ${uid}, ${sem.course_name}, ${data.newSemesterName}, now()::date, true)
+    `;
+
+    // Copy subjects (reset closed flag, no periods)
+    const idMap: Record<string, string> = {};
+    for (const s of subjects) {
+      const newSubId = newId();
+      idMap[s.id] = newSubId;
+      await sql`
+        insert into subjects (id, user_id, semester_id, name, code, default_teacher, description)
+        values (${newSubId}, ${uid}, ${newSemId}, ${s.name}, ${s.code}, ${s.default_teacher}, ${s.description ?? null})
+      `;
+    }
+
+    return { newSemesterId: newSemId, subjectIdMap: idMap };
+  });
+
 export const deleteCreditGrant = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((d: unknown) => z.object({ id: z.string() }).parse(d))
@@ -485,6 +550,7 @@ const importSchema = z.object({
       name: z.string(),
       code: z.string().nullable(),
       defaultTeacher: z.string().nullable(),
+      description: z.string().nullable().optional(),
       closed: z.boolean(),
     }),
   ),
@@ -549,8 +615,8 @@ export const importSnapshot = createServerFn({ method: "POST" })
     }
     for (const s of data.subjects) {
       await sql`
-        insert into subjects (id, user_id, semester_id, name, code, default_teacher, closed)
-        values (${s.id}, ${uid}, ${s.semesterId}, ${s.name}, ${s.code}, ${s.defaultTeacher}, ${s.closed})
+        insert into subjects (id, user_id, semester_id, name, code, default_teacher, description, closed)
+        values (${s.id}, ${uid}, ${s.semesterId}, ${s.name}, ${s.code}, ${s.defaultTeacher}, ${s.description ?? null}, ${s.closed})
       `;
     }
     for (const p of data.periods) {

@@ -37,10 +37,12 @@
 
 **Rollbook** is designed specifically for college and university students managing attendance percentage requirements (e.g., 75% or 80% threshold). Unlike generic tracker apps, Rollbook factors in real-world academic dynamics:
 
-- **Timetable-driven sessions** with period numbers, time slots, day-of-week slots, and teacher allocations.
+- **Timetable-driven sessions** with period numbers, time slots, day-of-week slots, and per-slot teacher allocations.
+- **Multi-teacher support** — each period slot can have its own teacher override on top of the subject's default faculty.
 - **Teacher credit allowances** (compensatory attendance for assignments, notes, lab work, or departmental projects).
 - **Exact bunk calculations** ("How many classes can I safely miss without dropping below threshold?").
 - **Recovery calculations** ("How many consecutive classes must I attend to recover my standing?").
+- **Routine archiving** — when the college changes the timetable mid-semester, archive the old routine and start fresh while keeping all historical attendance data intact.
 - **Offline-ready and zero-setup local storage** using **PGLite** (Postgres in WASM) when running locally or in development, with frictionless migration to **Neon Serverless PostgreSQL** in production.
 
 ---
@@ -62,10 +64,16 @@
 ### 2. Timetable & Schedule Management
 - **Semester Structure**: Organize academic sessions with start dates, course name, semester title, and active flags.
 - **Dynamic Weekly Timetable**:
-  - Configure recurring classes by weekday (Monday–Sunday).
-  - Slot by period number, start time, end time, and room/teacher name.
+  - Configure recurring classes by weekday (Monday–Saturday).
+  - Slot by period number, start time, end time.
+  - Per-slot teacher override — different faculty for the same subject on different days is fully supported.
   - Conflict prevention and unique indexing over `(user_id, semester_id, day_of_week, period_number)`.
-- **Active / Closed Semesters**: Archive past semesters while retaining historical attendance data.
+- **Manage periods from the subject page**: Add, edit, or delete individual period slots directly from the subject detail view — no need to navigate to the Routine tab.
+- **Routine Archiving**: When the college changes the schedule mid-semester, use _Archive routine & start fresh_ to:
+  - Mark the current semester as archived (attendance history preserved).
+  - Create a new active semester with all subjects copied over (codes, teachers, and notes intact).
+  - Start with a blank timetable and add the updated periods.
+- **Active / Closed Semesters**: Archive past semesters while retaining all historical attendance data.
 
 ### 3. Intelligent Attendance & Bunk Intelligence
 - **Threshold Enforcement**: Customizable threshold percentage (default: 75%).
@@ -87,11 +95,14 @@
 
 ### 5. Visual Analytics & Calendar
 - **Interactive Calendar View**: Month-by-month grid displaying daily attendance states.
-- **Subject-Specific Deep Dives**: Drill into individual subject cards to examine:
-  - Subject code and allocated faculty.
-  - Cumulative attendance percentage.
-  - Historical marks timeline.
-  - List of assigned credits.
+- **Subject-Specific Deep Dives**: Click any subject card to open a full detail view showing:
+  - Subject code, all assigned teachers (default + per-slot overrides), and optional description/notes.
+  - **Class schedule** grouped by day — every period listed with its time range and teacher, with inline edit and delete.
+  - Add new period slots directly from the subject page.
+  - Cumulative attendance percentage with bunk / recovery metrics.
+  - Full colour-coded attendance history (present / absent / not held).
+  - List of assigned teacher credits.
+- **Per-subject completion toggle**: Mark individual subjects as "no more classes" — directly on the subject list card or inside the detail page — without closing the whole semester. Completed subjects are visually dimmed with a strikethrough.
 
 ### 6. Data Portability & Settings
 - **JSON Snapshot Export**: Download complete user data (profile, semesters, timetable, marks, credits) in one portable JSON file.
@@ -141,6 +152,7 @@ Rollbook/
 ├── migrations/                     # SQL migration files
 │   ├── 0001_auth.sql              # Better Auth tables (camelCase schema)
 │   ├── 0002_rollbook.sql          # Rollbook entities (profiles, semesters, etc.)
+│   ├── 0003_subject_description.sql # Adds description column to subjects
 │   └── auth/                      # Upstream auth definitions
 ├── public/                         # Static assets, PWA icons, manifest
 ├── scripts/                        # Database migration, preview & test runners
@@ -178,6 +190,7 @@ Rollbook/
 │   └── styles.css                 # Tailwind CSS 4 style tokens
 ├── package.json
 ├── tsconfig.json
+├── vercel.json
 └── vite.config.ts
 ```
 
@@ -238,6 +251,7 @@ CREATE TABLE subjects (
   name TEXT NOT NULL,
   code TEXT,
   default_teacher TEXT,
+  description TEXT,                      -- optional notes, room, syllabus, multiple teachers
   closed BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -378,6 +392,6 @@ Rollbook is designed for frictionless zero-config deployment on **Vercel** or an
 2. **Environment Variables**: Add `DATABASE_URL` pointing to your [Neon](https://neon.tech) PostgreSQL instance, set `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `VITE_AUTH_ENABLED=true`, and `RESEND_API_KEY` for password reset emails. See `.env.example` for the full list.
 3. **Build Command**: The default build script (`npm run build`) automatically applies all SQL migrations before completing deployment.
 
-###Author
+### Author
 
 Mritunjay Kumar Pandey

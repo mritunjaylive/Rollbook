@@ -23,6 +23,7 @@ export type Subject = {
   name: string;
   code: string | null;
   defaultTeacher: string | null;
+  description: string | null;
   closed: boolean;
 };
 

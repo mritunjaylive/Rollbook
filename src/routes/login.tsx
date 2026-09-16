@@ -72,7 +72,7 @@ function Login() {
         </h1>
         <p className="mt-3 max-w-[34ch] text-ink-soft">
           Mark present or absent, watch the 75% line, and keep teacher credit in
-          one place — synced with your email.
+          one place, synced with your email.
         </p>
 
         <form

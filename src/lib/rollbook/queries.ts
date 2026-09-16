@@ -95,6 +95,7 @@ export function useRollbookMutations() {
       name: string;
       code?: string | null;
       defaultTeacher?: string | null;
+      description?: string | null;
     }) => api.upsertSubject({ data }),
     onSuccess: () => invalidate(),
   });
@@ -176,6 +177,12 @@ export function useRollbookMutations() {
     onSuccess: () => invalidate(),
   });
 
+  const archiveRoutine = useMutation({
+    mutationFn: (data: { semesterId: string; newSemesterName: string }) =>
+      api.archiveRoutine({ data }),
+    onSuccess: () => invalidate(),
+  });
+
   return {
     upsertProfile,
     upsertSemester,
@@ -192,5 +199,6 @@ export function useRollbookMutations() {
     addCreditGrant,
     deleteCreditGrant,
     importSnapshot,
+    archiveRoutine,
   };
 }
