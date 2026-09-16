@@ -44,7 +44,7 @@ export async function sendEmail(opts: SendEmailOptions): Promise<void> {
     return;
   }
 
-  const { Resend } = await import("@resend/node");
+  const { Resend } = await import("resend");
   const resend = new Resend(apiKey);
 
   const { error } = await resend.emails.send({
