@@ -33,6 +33,23 @@ export function AppShell({
   const snapshot = useSnapshot();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
+  // ALL hooks declared unconditionally at the top — before any early returns.
+  // This is the fix for React Error #310.
+  const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAvatarSrc(user?.id ? getAvatar(user.id) : null);
+  }, [user?.id]);
+
+  useEffect(() => {
+    function onAvatarUpdate() {
+      setAvatarSrc(user?.id ? getAvatar(user.id) : null);
+    }
+    window.addEventListener("rollbook:avatar-updated", onAvatarUpdate);
+    return () => window.removeEventListener("rollbook:avatar-updated", onAvatarUpdate);
+  }, [user?.id]);
+
+  // Early returns AFTER all hooks have run.
   if (isPending) return <ShellSkeleton />;
   if (!user) return <RedirectToSignIn />;
   if (snapshot.isLoading) return <ShellSkeleton />;
@@ -46,21 +63,6 @@ export function AppShell({
     : profile
       ? profile.collegeName
       : "Set up your roll";
-
-  // Read avatar from localStorage — re-read when user changes
-  const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
-  useEffect(() => {
-    setAvatarSrc(user?.id ? getAvatar(user.id) : null);
-  }, [user?.id]);
-
-  // Listen for avatar updates dispatched by the settings page
-  useEffect(() => {
-    function onAvatarUpdate() {
-      setAvatarSrc(user?.id ? getAvatar(user.id) : null);
-    }
-    window.addEventListener("rollbook:avatar-updated", onAvatarUpdate);
-    return () => window.removeEventListener("rollbook:avatar-updated", onAvatarUpdate);
-  }, [user?.id]);
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-5xl flex-col bg-paper">
