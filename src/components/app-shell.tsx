@@ -33,6 +33,8 @@ export function AppShell({
   const { user, isPending } = useCurrentUserState();
   const snapshot = useSnapshot();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  
+  const profile = snapshot.data?.profile ?? null;
 
   // ALL hooks unconditionally at the top — fixes React Error #310.
   // avatarUrl is the versioned /api/avatar?v=… URL (or null).
@@ -55,7 +57,7 @@ export function AppShell({
   if (!user) return <RedirectToSignIn />;
   if (snapshot.isLoading) return <ShellSkeleton />;
 
-  const profile = snapshot.data?.profile ?? null;
+  
   if (!profile && pathname !== "/setup") return <Navigate to="/setup" />;
 
   const active = selectActive(snapshot.data);

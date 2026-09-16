@@ -23,6 +23,7 @@ type ProfileRow = {
   student_id: string;
   college_name: string;
   threshold_percent: number;
+  has_avatar: boolean;
 };
 type SemesterRow = {
   id: string;
@@ -73,6 +74,7 @@ function mapProfile(r: ProfileRow): Profile {
     studentId: r.student_id,
     collegeName: r.college_name,
     thresholdPercent: Number(r.threshold_percent),
+    hasAvatar: Boolean(r.has_avatar),
   };
 }
 function mapSemester(r: SemesterRow): Semester {
@@ -140,7 +142,7 @@ export const getSnapshot = createServerFn({ method: "GET" })
     const uid = context.userId;
     const [profiles, semesters, subjects, periods, attendance, credits] =
       await Promise.all([
-        sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent from profiles where user_id = ${uid}`,
+        sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, (avatar_data is not null) as has_avatar from profiles where user_id = ${uid}`,
         sql<SemesterRow>`select id, course_name, semester_name, start_date, is_active, classes_over from semesters where user_id = ${uid} order by created_at desc`,
         sql<SubjectRow>`select id, semester_id, name, code, default_teacher, description, closed from subjects where user_id = ${uid} order by created_at`,
         sql<PeriodRow>`select id, semester_id, subject_id, day_of_week, period_number, start_time, end_time, teacher_name from periods where user_id = ${uid} order by day_of_week, period_number`,
