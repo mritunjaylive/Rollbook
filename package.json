@@ -23,7 +23,7 @@
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",
     "@hookform/resolvers": "^5.7.0",
-    "@resend/node": "^4.6.0",
+    "resend": "^4.1.2",
     "better-auth": "~1.6.30",
     "jose": "6.2.9",
     "kysely": "^0.28.5",
