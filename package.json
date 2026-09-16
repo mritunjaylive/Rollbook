@@ -1,5 +1,6 @@
 {
-  "name": "app-builder-workspace",
+  "name": "rollbook",
+  "version": "1.1.0",
   "private": true,
   "sideEffects": false,
   "type": "module",

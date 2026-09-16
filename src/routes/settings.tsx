@@ -21,7 +21,7 @@ import { localISODate } from "@/lib/utils";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.1.0";
 
 function SettingsPage() {
   const user = useCurrentUser();
