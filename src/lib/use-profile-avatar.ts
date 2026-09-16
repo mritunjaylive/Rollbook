@@ -51,12 +51,12 @@ function clearVersion(userId: string): void {
  * Returns the versioned avatar URL for `<img src={…}>`.
  * Returns null when no avatar has ever been uploaded.
  */
-export function getAvatarUrl(userId: string, hasAvatar?: boolean): string | null {
-  if (typeof window === "undefined") return null;
+export function getAvatarUrl(userId: string): string | null {
+  if (typeof window === "undefined" || !userId) return null;
   const v = getVersion(userId);
   if (v !== "0") return `/api/avatar?v=${v}`;
-  if (hasAvatar) return `/api/avatar`;
-  return null;
+  // Fallback so any other logged-in device queries the database directly:
+  return `/api/avatar`;
 }
 
 /**

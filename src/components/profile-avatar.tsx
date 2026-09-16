@@ -36,40 +36,32 @@ export function ProfileAvatar({
   className,
 }: ProfileAvatarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const [imgFailed, setImgFailed] = useState(false);
   const initial = (name.trim()[0] ?? "?").toUpperCase();
-  const fontSize = Math.round(size * 0.4);
 
-  async function handleFile(file: File) {
-    try {
-      const dataUrl = await fileToDataUrl(file);
-      onAvatarChange?.(dataUrl);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Could not load image.");
-    }
-  }
+  // Reset error state if src changes
+  useEffect(() => {
+    setImgFailed(false);
+  }, [src]);
 
   return (
     <div
       className={cn("relative shrink-0 select-none", className)}
       style={{ width: size, height: size }}
     >
-      {/* Photo or initial fallback */}
-      {src ? (
+      {src && !imgFailed ? (
         <img
           src={src}
           alt={`${name}'s profile picture`}
-          className="h-full w-full rounded-full object-cover ring-2 ring-line"
+          className="h-full w-full rounded-full object-cover"
           style={{ width: size, height: size }}
-          // If the cached URL is stale / returns 204, fall back to the initial
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).style.display = "none";
-          }}
+          onError={() => setImgFailed(true)}
         />
       ) : (
         <div
-          className="flex h-full w-full items-center justify-center rounded-full bg-accent font-semibold text-accent-fg ring-2 ring-accent/20"
-          style={{ fontSize }}
-          aria-label={`${name} — no profile picture`}
+          className="flex h-full w-full items-center justify-center rounded-full bg-accent font-semibold text-accent-fg"
+          style={{ fontSize: Math.round(size * 0.4) }}
+          aria-label={`${name}'s profile picture placeholder`}
         >
           {initial}
         </div>
