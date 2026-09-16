@@ -1,0 +1,17 @@
+{
+  "name": "Rollbook",
+  "short_name": "Rollbook",
+  "description": "College attendance, credit, and 75% tracker",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1f4d47",
+  "icons": [
+    {
+      "src": "/__grok/rollbook-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
