@@ -9,7 +9,7 @@
  * the new URL via onAvatarChange.
  */
 import { Camera, X } from "lucide-react";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { fileToDataUrl } from "@/lib/use-profile-avatar";
 
