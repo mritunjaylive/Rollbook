@@ -10,7 +10,11 @@ import { Dialog } from "@/components/ui/dialog";
 import { Field, Input } from "@/components/ui/input";
 import { UserButton } from "@/lib/auth/gates";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
-import { clearAvatar, getAvatar, saveAvatar } from "@/lib/use-profile-avatar";
+import {
+  getAvatarUrl,
+  uploadAvatar,
+  removeAvatar,
+} from "@/lib/use-profile-avatar";
 import { selectActive, useRollbookMutations, useSnapshot } from "@/lib/rollbook/queries";
 import type { Profile } from "@/lib/rollbook/types";
 import { localISODate } from "@/lib/utils";
@@ -30,24 +34,24 @@ function SettingsPage() {
   const profile = snapshot?.profile;
 
   // ── Avatar state ──────────────────────────────────────────────────────────
-  const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   useEffect(() => {
-    setAvatarSrc(user?.id ? getAvatar(user.id) : null);
+    setAvatarUrl(user?.id ? getAvatarUrl(user.id) : null);
   }, [user?.id]);
 
-  function handleAvatarChange(dataUrl: string | null) {
+  async function handleAvatarChange(dataUrl: string | null) {
     if (!user?.id) return;
     try {
       if (dataUrl) {
-        saveAvatar(user.id, dataUrl);
-        setAvatarSrc(dataUrl);
+        const newUrl = await uploadAvatar(user.id, dataUrl);
+        setAvatarUrl(newUrl);
         toast.success("Profile picture updated.");
       } else {
-        clearAvatar(user.id);
-        setAvatarSrc(null);
+        await removeAvatar(user.id);
+        setAvatarUrl(null);
         toast.success("Profile picture removed.");
       }
-      // Notify app-shell and home page to refresh
+      // Notify header + home page
       window.dispatchEvent(new Event("rollbook:avatar-updated"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save picture.");
@@ -118,7 +122,7 @@ function SettingsPage() {
           key={profile.studentId}
           profile={profile}
           userId={user?.id ?? ""}
-          avatarSrc={avatarSrc}
+          avatarUrl={avatarUrl}
           onAvatarChange={handleAvatarChange}
         />
       ) : null}
@@ -283,12 +287,12 @@ function SettingsPage() {
 function ProfileForm({
   profile,
   userId,
-  avatarSrc,
+  avatarUrl,
   onAvatarChange,
 }: {
   profile: Profile;
   userId: string;
-  avatarSrc: string | null;
+  avatarUrl: string | null;
   onAvatarChange: (dataUrl: string | null) => void;
 }) {
   const mut = useRollbookMutations();
@@ -320,7 +324,7 @@ function ProfileForm({
       {/* Avatar + name side-by-side */}
       <div className="flex items-center gap-4">
         <ProfileAvatar
-          src={avatarSrc}
+          src={avatarUrl}
           name={studentName || profile.studentName}
           size={72}
           editable

@@ -1,12 +1,12 @@
 /**
  * ProfileAvatar
  *
- * Displays the student's photo stored in localStorage, or a fallback showing
- * the first letter of their name on the Rollbook brand colour.
+ * Renders the student photo from /api/avatar?v=<version> (browser-cached),
+ * or a branded initial placeholder when no photo exists.
  *
- * When `editable` is true a camera-icon overlay appears on hover/focus so the
- * user can tap it to open a file picker. The parent is responsible for calling
- * onAvatarChange with the new data-URL (or null to clear).
+ * When `editable` is true a camera overlay appears on hover so the user can
+ * tap to pick a new file. The parent handles the actual upload and passes back
+ * the new URL via onAvatarChange.
  */
 import { Camera, X } from "lucide-react";
 import { useRef } from "react";
@@ -14,15 +14,15 @@ import { cn } from "@/lib/utils";
 import { fileToDataUrl } from "@/lib/use-profile-avatar";
 
 interface ProfileAvatarProps {
-  /** The stored base64 data-URL, or null for no photo. */
+  /** Versioned URL (/api/avatar?v=…) or null for no photo. */
   src: string | null;
   /** Display name used to derive the fallback initial. */
   name: string;
-  /** Pixel size rendered (both width and height). Default 48. */
+  /** Pixel size (width = height). Default 48. */
   size?: number;
   /** Show the upload / remove overlay. Default false. */
   editable?: boolean;
-  /** Called with the new data-URL after the user picks a file, or null when removed. */
+  /** Called with the validated data-URL after file selection, or null to remove. */
   onAvatarChange?: (dataUrl: string | null) => void;
   className?: string;
 }
@@ -37,13 +37,13 @@ export function ProfileAvatar({
 }: ProfileAvatarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const initial = (name.trim()[0] ?? "?").toUpperCase();
+  const fontSize = Math.round(size * 0.4);
 
   async function handleFile(file: File) {
     try {
       const dataUrl = await fileToDataUrl(file);
       onAvatarChange?.(dataUrl);
     } catch (err) {
-      // Surface error to the user via a native alert so we don't pull in toast here
       alert(err instanceof Error ? err.message : "Could not load image.");
     }
   }
@@ -53,47 +53,49 @@ export function ProfileAvatar({
       className={cn("relative shrink-0 select-none", className)}
       style={{ width: size, height: size }}
     >
-      {/* ── Photo or initial fallback ── */}
+      {/* Photo or initial fallback */}
       {src ? (
         <img
           src={src}
           alt={`${name}'s profile picture`}
-          className="h-full w-full rounded-full object-cover"
+          className="h-full w-full rounded-full object-cover ring-2 ring-line"
           style={{ width: size, height: size }}
+          // If the cached URL is stale / returns 204, fall back to the initial
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = "none";
+          }}
         />
       ) : (
         <div
-          className="flex h-full w-full items-center justify-center rounded-full bg-accent font-semibold text-accent-fg"
-          style={{ fontSize: Math.round(size * 0.4) }}
-          aria-label={`${name}'s profile picture placeholder`}
+          className="flex h-full w-full items-center justify-center rounded-full bg-accent font-semibold text-accent-fg ring-2 ring-accent/20"
+          style={{ fontSize }}
+          aria-label={`${name} — no profile picture`}
         >
           {initial}
         </div>
       )}
 
-      {/* ── Editable overlay ── */}
+      {/* Editable overlay */}
       {editable && (
         <>
-          {/* Upload trigger */}
           <button
             type="button"
             aria-label="Change profile picture"
             onClick={() => fileRef.current?.click()}
-            className="absolute inset-0 flex items-center justify-center rounded-full bg-ink/0 transition-colors hover:bg-ink/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent group"
+            className="group absolute inset-0 flex items-center justify-center rounded-full bg-ink/0 transition-colors hover:bg-ink/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <Camera
-              className="size-5 text-white opacity-0 drop-shadow group-hover:opacity-100 transition-opacity"
+              className="size-5 text-white opacity-0 drop-shadow transition-opacity group-hover:opacity-100"
               aria-hidden
             />
           </button>
 
-          {/* Remove button — only shown when there's a photo */}
           {src && (
             <button
               type="button"
               aria-label="Remove profile picture"
               onClick={() => onAvatarChange?.(null)}
-              className="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-warn text-white shadow-sm hover:bg-warn/90 focus-visible:outline-2 focus-visible:outline-accent"
+              className="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-warn text-white shadow hover:bg-warn/80 focus-visible:outline-2 focus-visible:outline-accent"
             >
               <X className="size-3" aria-hidden />
             </button>

@@ -530,6 +530,65 @@ export const deleteCreditGrant = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+// ── Avatar ────────────────────────────────────────────────────────────────────
+// avatar_data is stored in the profiles table (0004_avatar.sql) but NEVER
+// fetched by getSnapshot — it is only read via GET /api/avatar, which sets
+// a 24-hour Cache-Control header so the browser downloads it at most once
+// per day and serves it from disk cache on every subsequent render.
+
+/** Returns the raw base64 data-URL for the current user's avatar, or null. */
+export const getAvatarData = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<{ dataUrl: string | null; updatedAt: string | null }> => {
+    const sql = await getSql();
+    const rows = await sql<{ avatar_data: string | null; updated_at: string }>`
+      select avatar_data, updated_at from profiles where user_id = ${context.userId}
+    `;
+    return {
+      dataUrl: rows[0]?.avatar_data ?? null,
+      updatedAt: rows[0]?.updated_at ?? null,
+    };
+  });
+
+const MAX_AVATAR_BYTES = 50 * 1024; // 50 KB
+
+/** Save (or replace) the avatar for the current user. */
+export const upsertAvatarData = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: unknown) =>
+    z.object({
+      dataUrl: z
+        .string()
+        .refine((s) => s.startsWith("data:image/"), "Must be an image data-URL.")
+        .refine((s) => {
+          const base64 = s.split(",")[1] ?? "";
+          return Math.ceil((base64.length * 3) / 4) <= MAX_AVATAR_BYTES;
+        }, "Image exceeds 50 KB limit."),
+    }).parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    // Upsert: profile row must already exist (created during setup).
+    await sql`
+      update profiles
+      set avatar_data = ${data.dataUrl}, updated_at = now()
+      where user_id = ${context.userId}
+    `;
+    return { ok: true as const };
+  });
+
+/** Remove the avatar for the current user. */
+export const deleteAvatarData = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const sql = await getSql();
+    await sql`
+      update profiles set avatar_data = null, updated_at = now()
+      where user_id = ${context.userId}
+    `;
+    return { ok: true as const };
+  });
+
 const importSchema = z.object({
   version: z.literal(1),
   profile: profileInput.nullable(),

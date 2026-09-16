@@ -17,6 +17,7 @@
   --color-present: #1d6b56;
   --color-absent: #9a3b2f;
   --font-display: "Newsreader", "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+  --font-brand: "Cinzel", "Trajan Pro", "Times New Roman", serif;
   --font-sans: "Figtree", "Segoe UI", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
   --radius-xs: 4px;

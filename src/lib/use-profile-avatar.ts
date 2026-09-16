@@ -1,60 +1,73 @@
 /**
- * Stores the student's profile picture in localStorage as a base64 data URL.
- * Kept client-side only — no DB column needed, no server round-trip.
+ * Avatar helpers — DB-backed, browser-cached.
  *
- * Key is scoped to the user id so multiple accounts on the same device don't
- * share a photo.
+ * Flow:
+ *   - The canonical source is the DB, served via GET /api/avatar with
+ *     Cache-Control: public, max-age=86400, immutable.
+ *   - The URL we hand to <img> is `/api/avatar?v=<version>`. The `v` param
+ *     is a counter stored in localStorage. Bumping it on upload forces the
+ *     browser to re-fetch; the old URL stays cached harmlessly.
+ *   - localStorage stores only the `v` counter (a small integer string),
+ *     never the image bytes — so there is no 50 KB hit on storage.
+ *   - On the very first render (before the DB fetch resolves) the <img> tag
+ *     uses the cached URL from the last session if one exists, giving an
+ *     instant paint with no flash of the fallback initial.
  */
 
-const MAX_BYTES = 50 * 1024; // 50 KB
+const MAX_BYTES = 50 * 1024; // 50 KB — enforced client-side before upload
 
-function storageKey(userId: string) {
-  return `rollbook.avatar.${userId}`;
+// ── Version counter (localStorage) ───────────────────────────────────────────
+
+function versionKey(userId: string) {
+  return `rollbook.avatar.v.${userId}`;
 }
 
-/** Read the stored avatar for a user. Returns null when none is set. */
-export function getAvatar(userId: string): string | null {
-  if (typeof window === "undefined") return null;
+function getVersion(userId: string): string {
+  if (typeof window === "undefined") return "0";
+  return localStorage.getItem(versionKey(userId)) ?? "0";
+}
+
+function bumpVersion(userId: string): string {
+  const next = String(Date.now()); // ms timestamp = unique enough
   try {
-    return localStorage.getItem(storageKey(userId));
+    localStorage.setItem(versionKey(userId), next);
   } catch {
-    return null;
+    /* storage full — harmless, URL will still change in memory */
   }
+  return next;
 }
 
-/** Persist a base64 data-URL avatar. Throws if the image exceeds 50 KB. */
-export function saveAvatar(userId: string, dataUrl: string): void {
-  // data:image/...;base64,<payload> — the raw byte count is ¾ of the base64 length
-  const base64Part = dataUrl.split(",")[1] ?? "";
-  const approxBytes = Math.ceil((base64Part.length * 3) / 4);
-  if (approxBytes > MAX_BYTES) {
-    throw new Error(`Image is too large (${Math.round(approxBytes / 1024)} KB). Maximum is 50 KB.`);
-  }
+function clearVersion(userId: string): void {
   try {
-    localStorage.setItem(storageKey(userId), dataUrl);
-  } catch {
-    throw new Error("Could not save avatar — storage may be full.");
-  }
-}
-
-/** Remove the stored avatar for a user. */
-export function clearAvatar(userId: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.removeItem(storageKey(userId));
+    localStorage.removeItem(versionKey(userId));
   } catch {
     /* ignore */
   }
 }
 
+// ── Public API ────────────────────────────────────────────────────────────────
+
 /**
- * Read a File as a base64 data URL, validate the size, and return it.
- * Rejects with a user-facing error message on failure.
+ * Returns the versioned avatar URL for `<img src={…}>`.
+ * Returns null when no avatar has ever been uploaded.
+ */
+export function getAvatarUrl(userId: string): string | null {
+  if (typeof window === "undefined") return null;
+  const v = getVersion(userId);
+  if (v === "0") return null; // never uploaded
+  return `/api/avatar?v=${v}`;
+}
+
+/**
+ * Validate a File before upload.
+ * Returns the base64 data-URL; rejects with a user-facing message on failure.
  */
 export function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     if (file.size > MAX_BYTES) {
-      reject(new Error(`Image is ${Math.round(file.size / 1024)} KB — maximum is 50 KB.`));
+      reject(
+        new Error(`Image is ${Math.round(file.size / 1024)} KB — maximum is 50 KB.`),
+      );
       return;
     }
     if (!file.type.startsWith("image/")) {
@@ -66,4 +79,38 @@ export function fileToDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(new Error("Could not read the file."));
     reader.readAsDataURL(file);
   });
+}
+
+/**
+ * Upload a new avatar.
+ *   1. POSTs the data-URL to /api/avatar (saved to DB).
+ *   2. Bumps the localStorage version counter so the URL changes.
+ *   3. Returns the new versioned URL to hand straight to <img>.
+ */
+export async function uploadAvatar(
+  userId: string,
+  dataUrl: string,
+): Promise<string> {
+  const res = await fetch("/api/avatar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dataUrl }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `Upload failed (${res.status}).`);
+  }
+  const v = bumpVersion(userId);
+  return `/api/avatar?v=${v}`;
+}
+
+/**
+ * Delete the avatar.
+ *   1. DELETEs from DB via /api/avatar.
+ *   2. Clears the localStorage version so getAvatarUrl returns null.
+ */
+export async function removeAvatar(userId: string): Promise<void> {
+  const res = await fetch("/api/avatar", { method: "DELETE" });
+  if (!res.ok) throw new Error(`Delete failed (${res.status}).`);
+  clearVersion(userId);
 }

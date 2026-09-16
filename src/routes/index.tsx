@@ -14,7 +14,7 @@ import { projectedCredit } from "@/lib/rollbook/stats";
 import { selectActive, useRollbookMutations, useSnapshot } from "@/lib/rollbook/queries";
 import type { AttendanceStatus, AttendanceStats, Period, Subject } from "@/lib/rollbook/types";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { getAvatar } from "@/lib/use-profile-avatar";
+import { getAvatarUrl } from "@/lib/use-profile-avatar";
 import { useClientDate } from "@/lib/use-client-date";
 import { parseISODate } from "@/lib/utils";
 
@@ -27,14 +27,14 @@ function TodayPage() {
   const mut = useRollbookMutations();
   const { user } = useCurrentUserState();
 
-  // Avatar — read from localStorage, refresh on avatar-updated event
-  const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
+  // Avatar URL — /api/avatar?v=<version>, browser caches it
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   useEffect(() => {
-    setAvatarSrc(user?.id ? getAvatar(user.id) : null);
+    setAvatarUrl(user?.id ? getAvatarUrl(user.id) : null);
   }, [user?.id]);
   useEffect(() => {
     function onUpdate() {
-      setAvatarSrc(user?.id ? getAvatar(user.id) : null);
+      setAvatarUrl(user?.id ? getAvatarUrl(user.id) : null);
     }
     window.addEventListener("rollbook:avatar-updated", onUpdate);
     return () => window.removeEventListener("rollbook:avatar-updated", onUpdate);
@@ -107,7 +107,7 @@ function TodayPage() {
           {snapshot.profile && (
             <div className="mb-3 flex items-center gap-3">
               <ProfileAvatar
-                src={avatarSrc}
+                src={avatarUrl}
                 name={snapshot.profile.studentName}
                 size={52}
               />

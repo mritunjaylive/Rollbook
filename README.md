@@ -1,6 +1,6 @@
 # Rollbook 📚
 
-> Modern, privacy-focused college attendance tracking, bunk planning, and credit management application built on TanStack Start, React 19, Tailwind CSS, Better Auth, and dual-mode PostgreSQL (Embedded PGLite & Cloud Neon).
+> Modern, privacy-focused college attendance tracking, bunk planning, and credit management application built on TanStack Start, React 19, Tailwind CSS, Better Auth, and dual-mode PostgreSQL (Embedded PGLite & Cloud Neon). Installable as a PWA for offline-ready access on any device.
 
 ---
 
@@ -105,9 +105,11 @@
 - **Per-subject completion toggle**: Mark individual subjects as "no more classes" — directly on the subject list card or inside the detail page — without closing the whole semester. Completed subjects are visually dimmed with a strikethrough.
 
 ### 6. Data Portability & Settings
-- **JSON Snapshot Export**: Download complete user data (profile, semesters, timetable, marks, credits) in one portable JSON file.
-- **Snapshot Import / Restore**: Seamless migration across browsers or test devices without data loss.
+- **JSON Snapshot Export**: Download complete user data (profile, semesters, timetable, marks, credits) in one portable JSON file. Avatar images are stored separately in the database and are not included in the export.
+- **Snapshot Import / Restore**: Seamless migration across browsers or test devices without data loss. The import validator accepts the current schema and gracefully handles older exports that predate the `description` field on subjects.
 - **Profile & Threshold Configuration**: Adjust student ID, college name, and target attendance percentage on the fly.
+- **Profile Picture**: Upload a photo (max 50 KB) from the Settings → Profile section. The image is stored in the database and served via `/api/avatar` with a 24-hour browser cache — downloaded once, served from disk cache on every subsequent load.
+- **PWA Install Prompt**: When the browser supports it, a non-intrusive banner offers to add Rollbook to the home screen for standalone, offline-ready access. The prompt is suppressed once the app is already installed or the user dismisses it.
 
 ---
 
@@ -153,6 +155,7 @@ Rollbook/
 │   ├── 0001_auth.sql              # Better Auth tables (camelCase schema)
 │   ├── 0002_rollbook.sql          # Rollbook entities (profiles, semesters, etc.)
 │   ├── 0003_subject_description.sql # Adds description column to subjects
+│   ├── 0004_avatar.sql            # Adds avatar_data column to profiles
 │   └── auth/                      # Upstream auth definitions
 ├── public/                         # Static assets, PWA icons, manifest
 ├── scripts/                        # Database migration, preview & test runners
@@ -164,8 +167,10 @@ Rollbook/
 │   │   ├── ui/                    # Base primitives (Button, Card, Dialog, Input)
 │   │   ├── app-shell.tsx          # Navigation header, sidebar, user controls
 │   │   ├── credit-form.tsx        # Dialog to grant & save teacher credits
+│   │   ├── install-prompt.tsx     # PWA "Add to Home Screen" banner
 │   │   ├── mark-pad.tsx           # Quick-marking pad for attendance
 │   │   ├── percent-ring.tsx       # SVG circular progress ring for attendance %
+│   │   ├── profile-avatar.tsx     # Avatar component (photo or initial fallback)
 │   │   └── stats-line.tsx         # Metric summary badges
 │   ├── lib/
 │   │   ├── auth/                  # Better Auth server, client, middleware & hooks
@@ -227,6 +232,7 @@ CREATE TABLE profiles (
   student_id TEXT NOT NULL,
   college_name TEXT NOT NULL,
   threshold_percent INTEGER NOT NULL DEFAULT 75,
+  avatar_data TEXT,                      -- base64 data-URL ≤ 50 KB; served via /api/avatar
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -335,6 +341,14 @@ $$\frac{P + C + N_{\text{attend}}}{H + N_{\text{attend}}} \ge r \implies N_{\tex
 - **Better Auth Framework**: Managed in `src/lib/auth/`. Employs standard JWT/session cookies stored on the first-party origin.
 - **Tenant Isolation**: Every database query in `src/lib/rollbook/api.ts` enforces `user_id = $userId` derived from the verified session context (`authMiddleware`).
 - **Input Sanitization**: All incoming payload shapes are validated through **Zod** schemas before executing parameterized SQL queries.
+- **Password Reset**: Fully wired via Better Auth's built-in forget/reset flow. A time-limited token is emailed via [Resend](https://resend.com); the `/forgot-password` and `/reset-password` routes handle the UI.
+
+## PWA & Offline
+
+Rollbook ships as a **Progressive Web App**:
+- A `beforeinstallprompt` banner (`InstallPrompt`) appears automatically in supported browsers, offering one-tap installation to the home screen.
+- Once installed it runs in standalone mode (no browser chrome) with the prompt suppressed.
+- Avatar images are cached by the browser for 24 hours via `Cache-Control: public, max-age=86400, immutable` on `GET /api/avatar`.
 
 ---
 
