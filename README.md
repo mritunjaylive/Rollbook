@@ -377,3 +377,7 @@ Rollbook is designed for frictionless zero-config deployment on **Vercel** or an
 1. **Deploy to Vercel**: Connect the repository to Vercel.
 2. **Environment Variables**: Add `DATABASE_URL` pointing to your [Neon](https://neon.tech) PostgreSQL instance, set `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `VITE_AUTH_ENABLED=true`, and `RESEND_API_KEY` for password reset emails. See `.env.example` for the full list.
 3. **Build Command**: The default build script (`npm run build`) automatically applies all SQL migrations before completing deployment.
+
+###Author
+
+Mritunjay Kumar Pandey
