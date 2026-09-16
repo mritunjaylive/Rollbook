@@ -6,9 +6,11 @@ import {
   CalendarRange,
   Settings,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { getAvatar } from "@/lib/use-profile-avatar";
 import { selectActive, useSnapshot } from "@/lib/rollbook/queries";
 import { cn } from "@/lib/utils";
 
@@ -45,21 +47,50 @@ export function AppShell({
       ? profile.collegeName
       : "Set up your roll";
 
+  // Read avatar from localStorage — re-read when user changes
+  const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
+  useEffect(() => {
+    setAvatarSrc(user?.id ? getAvatar(user.id) : null);
+  }, [user?.id]);
+
+  // Listen for avatar updates dispatched by the settings page
+  useEffect(() => {
+    function onAvatarUpdate() {
+      setAvatarSrc(user?.id ? getAvatar(user.id) : null);
+    }
+    window.addEventListener("rollbook:avatar-updated", onAvatarUpdate);
+    return () => window.removeEventListener("rollbook:avatar-updated", onAvatarUpdate);
+  }, [user?.id]);
+
   return (
     <div className="mx-auto flex min-h-dvh max-w-5xl flex-col bg-paper">
       <header className="sticky top-0 z-20 border-b border-line/80 bg-paper/90 px-4 py-3 backdrop-blur-md pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <div className="flex items-end justify-between gap-3">
-          <div className="min-w-0">
-            <p className="font-display text-[1.35rem] font-semibold tracking-tight text-ink">
-              Rollbook
-            </p>
-            <p className="truncate text-sm text-ink-soft">{subtitle}</p>
+        <div className="flex items-center justify-between gap-3">
+          {/* ── Logo + title ── */}
+          <div className="flex min-w-0 items-center gap-2.5">
+            <img
+              src="/favicon.svg"
+              alt="Rollbook"
+              className="size-7 shrink-0 rounded-md"
+              aria-hidden
+            />
+            <div className="min-w-0">
+              <p className="font-display text-[1.2rem] font-semibold tracking-tight text-ink leading-tight">
+                Rollbook
+              </p>
+              <p className="truncate text-xs text-ink-soft">{subtitle}</p>
+            </div>
           </div>
+
+          {/* ── Avatar ── */}
           {profile ? (
-            <p className="hidden shrink-0 text-right text-xs text-ink-faint sm:block">
-              {profile.studentName}
-              <span className="mt-0.5 block tabular-nums">{profile.studentId}</span>
-            </p>
+            <Link to="/settings" aria-label="Open settings">
+              <ProfileAvatar
+                src={avatarSrc}
+                name={profile.studentName}
+                size={36}
+              />
+            </Link>
           ) : null}
         </div>
       </header>

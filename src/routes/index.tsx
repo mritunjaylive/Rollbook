@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
 import { MarkPad } from "@/components/mark-pad";
 import { PercentRing } from "@/components/percent-ring";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { StatsLine } from "@/components/stats-line";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,6 +13,8 @@ import { statsForSemester, statsForSubject } from "@/lib/rollbook/derive";
 import { projectedCredit } from "@/lib/rollbook/stats";
 import { selectActive, useRollbookMutations, useSnapshot } from "@/lib/rollbook/queries";
 import type { AttendanceStatus, AttendanceStats, Period, Subject } from "@/lib/rollbook/types";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { getAvatar } from "@/lib/use-profile-avatar";
 import { useClientDate } from "@/lib/use-client-date";
 import { parseISODate } from "@/lib/utils";
 
@@ -21,6 +25,20 @@ function TodayPage() {
   const snapshot = snapQ.data;
   const today = useClientDate();
   const mut = useRollbookMutations();
+  const { user } = useCurrentUserState();
+
+  // Avatar — read from localStorage, refresh on avatar-updated event
+  const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
+  useEffect(() => {
+    setAvatarSrc(user?.id ? getAvatar(user.id) : null);
+  }, [user?.id]);
+  useEffect(() => {
+    function onUpdate() {
+      setAvatarSrc(user?.id ? getAvatar(user.id) : null);
+    }
+    window.addEventListener("rollbook:avatar-updated", onUpdate);
+    return () => window.removeEventListener("rollbook:avatar-updated", onUpdate);
+  }, [user?.id]);
 
   const active = selectActive(snapshot);
   const threshold = snapshot?.profile?.thresholdPercent ?? 75;
@@ -85,6 +103,24 @@ function TodayPage() {
           label="Overall"
         />
         <div>
+          {/* Student identity row */}
+          {snapshot.profile && (
+            <div className="mb-3 flex items-center gap-3">
+              <ProfileAvatar
+                src={avatarSrc}
+                name={snapshot.profile.studentName}
+                size={52}
+              />
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-ink">
+                  {snapshot.profile.studentName}
+                </p>
+                <p className="truncate text-xs text-ink-faint">
+                  {snapshot.profile.studentId} · {snapshot.profile.collegeName}
+                </p>
+              </div>
+            </div>
+          )}
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-faint">
             {jsDay === 0 ? "Sunday" : weekdayName(jsDay ?? 0)} · {todayIso}
           </p>

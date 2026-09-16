@@ -1,3 +1,4 @@
+import { Analytics } from "@vercel/analytics/react";
 import { createServerFn } from "@tanstack/react-start";
 import {
   createRootRoute,
@@ -64,6 +65,7 @@ function Root() {
             <Outlet />
           </AppProviders>
         </AuthProvider>
+        <Analytics />
         <Scripts />
       </body>
     </html>

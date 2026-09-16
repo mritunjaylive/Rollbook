@@ -1,18 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { Github, Mail, Twitter } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input } from "@/components/ui/input";
 import { UserButton } from "@/lib/auth/gates";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
+import { clearAvatar, getAvatar, saveAvatar } from "@/lib/use-profile-avatar";
 import { selectActive, useRollbookMutations, useSnapshot } from "@/lib/rollbook/queries";
 import type { Profile } from "@/lib/rollbook/types";
 import { localISODate } from "@/lib/utils";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
+
+const APP_VERSION = "1.0.0";
 
 function SettingsPage() {
   const user = useCurrentUser();
@@ -24,6 +29,32 @@ function SettingsPage() {
   const [semOpen, setSemOpen] = useState(false);
   const profile = snapshot?.profile;
 
+  // ── Avatar state ──────────────────────────────────────────────────────────
+  const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
+  useEffect(() => {
+    setAvatarSrc(user?.id ? getAvatar(user.id) : null);
+  }, [user?.id]);
+
+  function handleAvatarChange(dataUrl: string | null) {
+    if (!user?.id) return;
+    try {
+      if (dataUrl) {
+        saveAvatar(user.id, dataUrl);
+        setAvatarSrc(dataUrl);
+        toast.success("Profile picture updated.");
+      } else {
+        clearAvatar(user.id);
+        setAvatarSrc(null);
+        toast.success("Profile picture removed.");
+      }
+      // Notify app-shell and home page to refresh
+      window.dispatchEvent(new Event("rollbook:avatar-updated"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save picture.");
+    }
+  }
+
+  // ── Backup helpers ────────────────────────────────────────────────────────
   function exportJson() {
     if (!snapshot) return;
     const blob = new Blob(
@@ -68,6 +99,7 @@ function SettingsPage() {
     <AppShell>
       <h1 className="font-display text-3xl font-semibold">More</h1>
 
+      {/* ── Account ── */}
       <Card className="mt-5">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-faint">
           Account
@@ -80,8 +112,18 @@ function SettingsPage() {
         </div>
       </Card>
 
-      {profile ? <ProfileForm key={profile.studentId} profile={profile} /> : null}
+      {/* ── Profile (with avatar) ── */}
+      {profile ? (
+        <ProfileForm
+          key={profile.studentId}
+          profile={profile}
+          userId={user?.id ?? ""}
+          avatarSrc={avatarSrc}
+          onAvatarChange={handleAvatarChange}
+        />
+      ) : null}
 
+      {/* ── Semesters ── */}
       <section className="mt-8">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-display text-xl font-semibold">Semesters</h2>
@@ -96,7 +138,16 @@ function SettingsPage() {
                 <div>
                   <p className="font-medium">
                     {s.semesterName}
-                    {s.isActive ? " · active" : ""}
+                    {s.isActive ? (
+                      <span className="ml-2 rounded-full bg-accent/15 px-2 py-0.5 text-xs font-semibold text-accent">
+                        active
+                      </span>
+                    ) : null}
+                    {s.classesOver ? (
+                      <span className="ml-2 rounded-full bg-line px-2 py-0.5 text-xs text-ink-faint">
+                        archived
+                      </span>
+                    ) : null}
                   </p>
                   <p className="text-xs text-ink-faint">
                     {s.courseName}
@@ -133,11 +184,11 @@ function SettingsPage() {
         ) : null}
       </section>
 
+      {/* ── Backup ── */}
       <section className="mt-8 space-y-3">
         <h2 className="font-display text-xl font-semibold">Backup</h2>
         <p className="text-sm text-ink-soft">
-          Your roll already syncs with this email. Export is an extra copy on your
-          device.
+          Your roll already syncs with this email. Export is an extra copy on your device.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={exportJson}>
@@ -160,12 +211,86 @@ function SettingsPage() {
         </div>
       </section>
 
+      {/* ── About ── */}
+      <section className="mt-8">
+        <h2 className="font-display text-xl font-semibold">About</h2>
+        <Card className="mt-3 space-y-4">
+          {/* App identity */}
+          <div className="flex items-center gap-3">
+            <img
+              src="/favicon.svg"
+              alt="Rollbook logo"
+              className="size-12 rounded-xl"
+            />
+            <div>
+              <p className="font-semibold text-ink">Rollbook</p>
+              <p className="text-xs text-ink-faint">Version {APP_VERSION}</p>
+              <p className="mt-0.5 text-xs text-ink-faint">
+                College attendance, bunk planner & credit tracker
+              </p>
+            </div>
+          </div>
+
+          <hr className="border-line" />
+
+          {/* Developer */}
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink-faint">
+              Developer
+            </p>
+            <p className="font-medium text-ink">Mritunjay Pandey</p>
+            <ul className="mt-2 space-y-2">
+              <li>
+                <a
+                  href="https://x.com/mritunjaylive"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
+                >
+                  <Twitter className="size-4 shrink-0" />
+                  @mritunjaylive
+                </a>
+              </li>
+              <li>
+                <a
+                  href="mailto:mritunjaylive@zohomail.in"
+                  className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
+                >
+                  <Mail className="size-4 shrink-0" />
+                  mritunjaylive@zohomail.in
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          <hr className="border-line" />
+
+          {/* Legal / misc */}
+          <p className="text-xs text-ink-faint">
+            Built with TanStack Start, React 19, Better Auth, and Neon PostgreSQL.
+            Your data is private and scoped to your account only.
+          </p>
+        </Card>
+      </section>
+
       <NewSemesterDialog open={semOpen} onOpenChange={setSemOpen} />
     </AppShell>
   );
 }
 
-function ProfileForm({ profile }: { profile: Profile }) {
+// ── Profile form (with editable avatar) ──────────────────────────────────────
+
+function ProfileForm({
+  profile,
+  userId,
+  avatarSrc,
+  onAvatarChange,
+}: {
+  profile: Profile;
+  userId: string;
+  avatarSrc: string | null;
+  onAvatarChange: (dataUrl: string | null) => void;
+}) {
   const mut = useRollbookMutations();
   const [studentName, setStudentName] = useState(profile.studentName);
   const [studentId, setStudentId] = useState(profile.studentId);
@@ -191,6 +316,27 @@ function ProfileForm({ profile }: { profile: Profile }) {
       }}
     >
       <h2 className="font-display text-xl font-semibold">Profile</h2>
+
+      {/* Avatar + name side-by-side */}
+      <div className="flex items-center gap-4">
+        <ProfileAvatar
+          src={avatarSrc}
+          name={studentName || profile.studentName}
+          size={72}
+          editable
+          onAvatarChange={onAvatarChange}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium text-ink">
+            {studentName || profile.studentName}
+          </p>
+          <p className="text-xs text-ink-faint">{studentId || profile.studentId}</p>
+          <p className="mt-1 text-xs text-ink-faint">
+            Tap the photo to upload · max 50 KB
+          </p>
+        </div>
+      </div>
+
       <Field label="Student name">
         <Input value={studentName} onChange={(e) => setStudentName(e.target.value)} required />
       </Field>
@@ -210,11 +356,13 @@ function ProfileForm({ profile }: { profile: Profile }) {
         />
       </Field>
       <Button type="submit" disabled={mut.upsertProfile.isPending}>
-        Save profile
+        {mut.upsertProfile.isPending ? "Saving…" : "Save profile"}
       </Button>
     </form>
   );
 }
+
+// ── New semester dialog ───────────────────────────────────────────────────────
 
 function NewSemesterDialog({
   open,
