@@ -3,10 +3,5 @@
   "buildCommand": "npm run build",
   "outputDirectory": ".vercel/output",
   "installCommand": "npm install",
-  "framework": null,
-  "functions": {
-    "**/__server.func/**": {
-      "runtime": "nodejs22.x"
-    }
-  }
+  "framework": null
 }
