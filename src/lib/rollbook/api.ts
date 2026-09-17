@@ -179,7 +179,7 @@ export const getSnapshot = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<Snapshot> => {
     const sql = await getSql();
     const uid = context.userId;
-    const [profiles, semesters, subjects, periods, attendance, credits, activities] =
+    const [profiles, semesters, subjects, periods, attendance, credits, activities, holidays] =
       await Promise.all([
         sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, (avatar_data is not null) as has_avatar from profiles where user_id = ${uid}`,
         sql<SemesterRow>`select id, course_name, semester_name, start_date, is_active, classes_over from semesters where user_id = ${uid} order by created_at desc`,
