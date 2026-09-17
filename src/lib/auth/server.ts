@@ -222,15 +222,6 @@ export const auth = betterAuth({
         emailAndPassword: {
           enabled: true,
           requireEmailVerification: true,
-          sendVerificationEmail: async ({ user, url }) => {
-            await sendEmail({
-              to: user.email,
-              subject: "Verify your email for Rollbook",
-              html: buildVerificationEmail({
-                verificationUrl: url,
-              }),
-            });
-          },
           sendResetPassword: async ({ user, url }) => {
             await sendEmail({
               to: user.email,
@@ -238,6 +229,18 @@ export const auth = betterAuth({
               html: buildPasswordResetEmail({
                 resetUrl: url,
                 expiresInMinutes: 60,
+              }),
+            });
+          },
+        },
+        emailVerification: {
+          sendOnSignUp: true,
+          sendVerificationEmail: async ({ user, url }) => {
+            await sendEmail({
+              to: user.email,
+              subject: "Verify your email for Rollbook",
+              html: buildVerificationEmail({
+                verificationUrl: url,
               }),
             });
           },
