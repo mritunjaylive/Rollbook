@@ -205,7 +205,7 @@ export function renderWebManifest(hostHeader) {
           "type": "image/png",
           "form_factor": "narrow",
           "label": "Today's Attendance on Mobile"
-        }
+        },
         {
           "src": "/screenshots/desktop-2.png",
           "sizes": "1368x730",
