@@ -13,7 +13,9 @@
   - [3. Intelligent Attendance & Bunk Intelligence](#3-intelligent-attendance--bunk-intelligence)
   - [4. Teacher Credit System](#4-teacher-credit-system)
   - [5. Visual Analytics & Calendar](#5-visual-analytics--calendar)
-  - [6. Data Portability & Settings](#6-data-portability--settings)
+  - [6. Extracurricular Participation Tracking](#6-extracurricular-participation-tracking)
+  - [7. Data Portability & Settings](#7-data-portability--settings)
+  - [8. Notifications & Alerts](#8-notifications--alerts)
 - [System Architecture](#system-architecture)
   - [High-Level Architecture Diagram](#high-level-architecture-diagram)
   - [Directory Structure](#directory-structure)
@@ -60,6 +62,7 @@
   - Total Classes Hosted, Present, and Absent.
   - Safe Bunk Allowance ($B$).
   - Classes needed to recover ($N_{\text{attend}}$).
+  - **Safe / Unsafe Badges**: Instantly see if you are above or below your attendance threshold with visual indicator badges on each subject.
 
 ### 2. Timetable & Schedule Management
 - **Semester Structure**: Organize academic sessions with start dates, course name, semester title, and active flags.
@@ -104,12 +107,22 @@
   - List of assigned teacher credits.
 - **Per-subject completion toggle**: Mark individual subjects as "no more classes" — directly on the subject list card or inside the detail page — without closing the whole semester. Completed subjects are visually dimmed with a strikethrough.
 
-### 6. Data Portability & Settings
+### 6. Extracurricular Participation Tracking
+- **Activity Log**: Keep a dated log of workshops, fests, games, and other events you took part in.
+- **Credit Integration**: Optionally associate participation events with credit points to keep a holistic view of your academic and extracurricular standing.
+
+### 7. Data Portability & Settings
 - **JSON Snapshot Export**: Download complete user data (profile, semesters, timetable, marks, credits) in one portable JSON file. Avatar images are stored separately in the database and are not included in the export.
 - **Snapshot Import / Restore**: Seamless migration across browsers or test devices without data loss. The import validator accepts the current schema and gracefully handles older exports that predate the `description` field on subjects.
+- **Locked Profile View**: Profile details are safely locked in read-only mode to prevent accidental modifications. You must explicitly click the "Edit" button to change your details.
 - **Profile & Threshold Configuration**: Adjust student ID, college name, and target attendance percentage on the fly.
+- **Social Links**: Connect with the developer via GitHub, LinkedIn, Twitter, and Email directly from the settings page.
 - **Profile Picture**: Upload a photo (max 50 KB) from the Settings → Profile section. The image is stored in the database and served via `/api/avatar` with a 24-hour browser cache — downloaded once, served from disk cache on every subsequent load.
 - **PWA Install Prompt**: When the browser supports it, a non-intrusive banner offers to add Rollbook to the home screen for standalone, offline-ready access. The prompt is suppressed once the app is already installed or the user dismisses it.
+
+### 8. Notifications & Alerts
+- **Welcome Email**: New users automatically receive a customized welcome email on registration via Resend.
+- **Push Notifications (Web Push)**: Subscribe to daily class summaries at 7:00 AM IST and get alerts if your attendance drops below your threshold. Works natively on browsers and mobile devices when installed as a PWA. (Requires VAPID keys and Vercel Cron).
 
 ---
 
@@ -371,8 +384,10 @@ cp .env.example .env
 | `BETTER_AUTH_SECRET` | Required for Auth | Secret signing key for session tokens. |
 | `BETTER_AUTH_URL` | Optional | Host URL (default: `http://localhost:8080`). |
 | `VITE_AUTH_ENABLED` | Required for Auth | Set to `true` when `DATABASE_URL` is configured. |
-| `RESEND_API_KEY` | Required for email | API key from [resend.com](https://resend.com) — enables password reset emails. |
-| `RESEND_FROM_EMAIL` | Optional | Sender address shown on reset emails (must be a verified domain in Resend). |
+| `RESEND_API_KEY` | Required for email | API key from [resend.com](https://resend.com) — enables password reset & welcome emails. |
+| `RESEND_FROM_EMAIL` | Optional | Sender address shown on emails (must be a verified domain in Resend). |
+| `VAPID_PUBLIC_KEY` | Optional | Required for Web Push Notifications (Daily Summaries). |
+| `VAPID_PRIVATE_KEY` | Optional | Required for Web Push Notifications. |
 
 ### Installation & Running
 

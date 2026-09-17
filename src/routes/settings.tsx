@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Github, Mail, Pencil, Twitter } from "lucide-react";
+import { Bell, Github, Linkedin, Mail, Pencil, Twitter } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { authEnabled, signOut } from "@/lib/auth/client";
 import { hasGateSessionMarker } from "@/lib/auth/gate-session-marker";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
@@ -23,7 +24,7 @@ import { localISODate } from "@/lib/utils";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.2.0";
 
 const subscribeToNothing = () => () => {};
 const noGateSessionOnServer = () => false;
@@ -206,6 +207,60 @@ function SettingsPage() {
       </section>
 
       <section className="mt-8 space-y-3">
+        <h2 className="font-display text-xl font-semibold">Notifications</h2>
+        <Card>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium">Daily Class Summaries & Alerts</p>
+              <p className="text-sm text-ink-soft">
+                Get morning updates and threshold alerts.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+                  toast.error("Push notifications not supported in this browser.");
+                  return;
+                }
+                const permission = await Notification.requestPermission();
+                if (permission !== "granted") {
+                  toast.error("Notification permission denied.");
+                  return;
+                }
+                try {
+                  const registration = await navigator.serviceWorker.ready;
+                  let subscription = await registration.pushManager.getSubscription();
+                  if (!subscription) {
+                    const response = await fetch("/api/vapid-public-key");
+                    if (!response.ok) throw new Error("Could not get VAPID key");
+                    const { publicKey } = await response.json();
+                    subscription = await registration.pushManager.subscribe({
+                      userVisibleOnly: true,
+                      applicationServerKey: publicKey,
+                    });
+                  }
+                  
+                  await fetch("/api/push", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(subscription),
+                  });
+                  toast.success("Notifications enabled.");
+                } catch (e) {
+                  toast.error("Error setting up notifications.");
+                }
+              }}
+            >
+              <Bell className="mr-2 size-4" />
+              Enable
+            </Button>
+          </div>
+        </Card>
+      </section>
+
+      <section className="mt-8 space-y-3">
         <h2 className="font-display text-xl font-semibold">Backup</h2>
         <p className="text-sm text-ink-soft">
           Your roll already syncs with this email. Export is an extra copy on your device.
@@ -265,6 +320,28 @@ function SettingsPage() {
                   className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
                 >
                   <Twitter className="size-4 shrink-0" />
+                  @mritunjaylive
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://github.com/mritunjaylive"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
+                >
+                  <Github className="size-4 shrink-0" />
+                  @mritunjaylive
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://linkedin.com/in/mritunjaylive"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
+                >
+                  <Linkedin className="size-4 shrink-0" />
                   @mritunjaylive
                 </a>
               </li>

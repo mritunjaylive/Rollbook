@@ -42,3 +42,20 @@ self.addEventListener("fetch", (event) => {
     }),
   );
 });
+
+self.addEventListener("push", (event) => {
+  const data = event.data ? event.data.json() : {};
+  const title = data.title || "Rollbook Update";
+  const options = {
+    body: data.body || "You have a new update.",
+    icon: "/rollbook-192.png",
+    badge: "/favicon.svg",
+    data: data.url || "/",
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(self.clients.openWindow(event.notification.data));
+});

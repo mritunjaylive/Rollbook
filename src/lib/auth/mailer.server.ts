@@ -119,3 +119,48 @@ export function buildPasswordResetEmail(opts: {
 </body>
 </html>`;
 }
+
+/**
+ * Build the HTML body for a welcome email.
+ */
+export function buildWelcomeEmail(opts: {
+  appName?: string;
+  userName: string;
+}): string {
+  const { appName = "Rollbook", userName } = opts;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome to ${appName}</title>
+</head>
+<body style="margin:0;padding:0;background:#f5f4f0;font-family:system-ui,-apple-system,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width:480px;background:#ffffff;border-radius:12px;padding:40px 32px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+          <tr>
+            <td>
+              <p style="margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#d97706;">
+                College attendance
+              </p>
+              <h1 style="margin:0 0 24px;font-size:28px;font-weight:700;color:#1c1814;letter-spacing:-0.02em;">
+                Welcome to ${appName}!
+              </h1>
+              <p style="margin:0 0 16px;font-size:16px;color:#1c1814;font-weight:400;line-height:1.5;">
+                Hi ${userName},<br><br>
+                Thanks for joining ${appName}. We're excited to help you track your college attendance, plan bunks, and monitor your credits seamlessly.
+              </p>
+              <p style="margin:0 0 24px;font-size:15px;color:#6b6460;line-height:1.5;">
+                Get started by creating your first semester and adding your subjects.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}

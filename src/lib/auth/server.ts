@@ -38,7 +38,7 @@ import { Pool } from "pg";
 import { ensureDbReady, getPglite } from "../db";
 import { emailAndPasswordEnabled } from "./email-password";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
-import { buildPasswordResetEmail, sendEmail } from "./mailer.server";
+import { buildPasswordResetEmail, buildWelcomeEmail, sendEmail } from "./mailer.server";
 import { GROK_PROVIDERS } from "./providers";
 import { pgliteDialect } from "./pglite-dialect";
 import {
@@ -250,6 +250,24 @@ export const auth = betterAuth({
       session_data: { name: "__Host-grok-auth.session_data" },
       account_data: { name: "__Host-grok-auth.account_data" },
       dont_remember: { name: "__Host-grok-auth.dont_remember" },
+    },
+  },
+
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          await sendEmail({
+            to: user.email,
+            subject: "Welcome to Rollbook!",
+            html: buildWelcomeEmail({
+              userName: user.name || "Student",
+            }),
+          }).catch((err) => {
+            console.error("[auth] Failed to send welcome email:", err);
+          });
+        },
+      },
     },
   },
 

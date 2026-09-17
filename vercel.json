@@ -3,5 +3,11 @@
   "buildCommand": "npm run build",
   "outputDirectory": ".vercel/output",
   "installCommand": "npm install",
-  "framework": null
+  "framework": null,
+  "crons": [
+    {
+      "path": "/api/cron/daily",
+      "schedule": "30 1 * * *"
+    }
+  ]
 }

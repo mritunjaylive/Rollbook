@@ -212,10 +212,23 @@ function TodayPage() {
                     className="block"
                   >
                     <Card>
-                      <p className="font-medium">{s.name}</p>
-                      <p className="text-xs text-ink-faint">
-                        {s.code || s.defaultTeacher || "Paper"}
-                      </p>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="font-medium">{s.name}</p>
+                          <p className="text-xs text-ink-faint">
+                            {s.code || s.defaultTeacher || "Paper"}
+                          </p>
+                        </div>
+                        {st.creditNeeded === 0 ? (
+                          <span className="rounded-[var(--radius-xs)] bg-safe-soft px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-safe">
+                            Safe
+                          </span>
+                        ) : (
+                          <span className="rounded-[var(--radius-xs)] bg-warn-soft px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-warn">
+                            Unsafe
+                          </span>
+                        )}
+                      </div>
                       <div className="mt-2">
                         <StatsLine stats={st} compact />
                       </div>
