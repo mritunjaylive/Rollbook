@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2, Share2, Link as LinkIcon, Check } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { createSharedRoutine } from "@/lib/rollbook/api";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,6 +21,7 @@ function TimetablePage() {
   const active = selectActive(snapshot);
   const [day, setDay] = useState(1);
   const [editing, setEditing] = useState<Period | null | "new">(null);
+  const [sharing, setSharing] = useState(false);
   const mut = useRollbookMutations();
 
   const byDay = useMemo(() => {
@@ -57,14 +59,23 @@ function TimetablePage() {
         <div>
           <h1 className="font-display text-3xl font-semibold">Routine</h1>
           <p className="text-sm text-ink-soft">Monday–Saturday. Different papers, different hours.</p>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setSharing(true)}
+            disabled={!active.semester || active.subjects.length === 0}
+          >
+            <Share2 className="size-4" />
+            <span className="hidden sm:inline">Share</span>
+          </Button>
+          <Button
+            onClick={() => setEditing("new")}
+            disabled={!active.semester || active.subjects.length === 0}
+          >
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">Period</span>
+          </Button>
         </div>
-        <Button
-          onClick={() => setEditing("new")}
-          disabled={!active.semester || active.subjects.length === 0}
-        >
-          <Plus className="size-4" />
-          Period
-        </Button>
       </div>
 
       {!active.semester ? (
@@ -187,6 +198,13 @@ function TimetablePage() {
           subjects={active.subjects}
           defaultDay={day}
           onClose={() => setEditing(null)}
+        />
+      ) : null}
+
+      {sharing && active.semester ? (
+        <ShareDialog
+          semesterId={active.semester.id}
+          onClose={() => setSharing(false)}
         />
       ) : null}
     </AppShell>
@@ -315,6 +333,78 @@ function PeriodDialog({
           </Button>
         </div>
       </form>
+    </Dialog>
+  );
+}
+
+function ShareDialog({ semesterId, onClose }: { semesterId: string; onClose: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [shareId, setShareId] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const inviteUrl = shareId ? `${window.location.origin}/invite/${shareId}` : "";
+  const qrUrl = shareId ? `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(inviteUrl)}` : "";
+
+  async function generate() {
+    try {
+      setLoading(true);
+      const res = await createSharedRoutine({ data: { semesterId } });
+      setShareId(res.id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to generate share link.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }} title="Share Timetable">
+      <div className="space-y-4 pt-2">
+        <p className="text-sm text-ink-soft">
+          Generate an invite link to let your classmates import this routine directly into their Rollbook.
+        </p>
+
+        {!shareId ? (
+          <Button className="w-full" onClick={() => void generate()} disabled={loading}>
+            {loading ? "Generating..." : "Generate Invite Link"}
+          </Button>
+        ) : (
+          <div className="flex flex-col items-center gap-6 animate-in fade-in slide-in-from-bottom-2">
+            <div className="rounded-[var(--radius-lg)] border border-line bg-white p-3 shadow-[var(--shadow-card)]">
+              <img src={qrUrl} alt="QR Code for Timetable Invite" className="size-40" />
+            </div>
+            
+            <div className="w-full space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-ink-faint">Invite Link</label>
+              <div className="flex w-full items-center gap-2 rounded-[var(--radius-md)] border border-line bg-page p-1 pr-2 shadow-sm">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center text-ink-soft">
+                  <LinkIcon className="size-4" />
+                </div>
+                <input
+                  readOnly
+                  value={inviteUrl}
+                  className="flex-1 truncate bg-transparent text-sm text-ink outline-none"
+                  onFocus={(e) => e.target.select()}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className={cn("h-8 shrink-0", copied && "text-green-600 border-green-600")}
+                  onClick={() => {
+                    navigator.clipboard.writeText(inviteUrl).then(() => {
+                      setCopied(true);
+                      toast.success("Link copied!");
+                      setTimeout(() => setCopied(false), 2000);
+                    });
+                  }}
+                >
+                  {copied ? <Check className="size-3" /> : "Copy"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </Dialog>
   );
 }

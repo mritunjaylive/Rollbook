@@ -867,3 +867,103 @@ export const importSnapshot = createServerFn({ method: "POST" })
     }
     return { ok: true as const };
   });
+
+// ── Shared Routines ───────────────────────────────────────────────────────────
+
+export const createSharedRoutine = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: unknown) => z.object({ semesterId: z.string() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const uid = context.userId;
+
+    const [sem] = await sql<SemesterRow>`select * from semesters where id = ${data.semesterId} and user_id = ${uid}`;
+    if (!sem) throw new Error("Semester not found.");
+
+    const subjects = await sql<SubjectRow>`select * from subjects where semester_id = ${data.semesterId} and user_id = ${uid}`;
+    const periods = await sql<PeriodRow>`select * from periods where semester_id = ${data.semesterId} and user_id = ${uid}`;
+
+    const payload = JSON.stringify({
+      semester: { courseName: sem.course_name, semesterName: sem.semester_name },
+      subjects: subjects.map(s => ({ id: s.id, name: s.name, code: s.code, defaultTeacher: s.default_teacher, description: s.description })),
+      periods: periods.map(p => ({ subjectId: p.subject_id, dayOfWeek: p.day_of_week, periodNumber: p.period_number, startTime: p.start_time, endTime: p.end_time, teacherName: p.teacher_name })),
+    });
+
+    const id = newId().substring(0, 12);
+    await sql`
+      insert into shared_routines (id, user_id, payload, created_at)
+      values (${id}, ${uid}, ${payload}, now())
+    `;
+
+    return { id };
+  });
+
+export const getSharedRoutinePreview = createServerFn({ method: "GET" })
+  .validator((d: unknown) => z.object({ id: z.string() }).parse(d))
+  .handler(async ({ data }) => {
+    const sql = await getSql();
+    const rows = await sql<{ payload: string }>`select payload from shared_routines where id = ${data.id}`;
+    if (!rows[0]) throw new Error("Routine not found or has expired.");
+    
+    const payload = JSON.parse(rows[0].payload) as {
+      semester: { courseName: string; semesterName: string };
+      subjects: any[];
+      periods: any[];
+    };
+
+    return {
+      courseName: payload.semester.courseName,
+      semesterName: payload.semester.semesterName,
+      subjectCount: payload.subjects.length,
+      periodCount: payload.periods.length,
+    };
+  });
+
+export const importSharedRoutine = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: unknown) => z.object({ id: z.string() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const uid = context.userId;
+
+    const rows = await sql<{ payload: string }>`select payload from shared_routines where id = ${data.id}`;
+    if (!rows[0]) throw new Error("Routine not found or has expired.");
+
+    const payload = JSON.parse(rows[0].payload) as {
+      semester: { courseName: string; semesterName: string };
+      subjects: Array<{ id: string; name: string; code: string | null; defaultTeacher: string | null; description: string | null }>;
+      periods: Array<{ subjectId: string; dayOfWeek: number; periodNumber: number; startTime: string; endTime: string; teacherName: string }>;
+    };
+
+    // Mark other semesters inactive
+    await sql`update semesters set is_active = false where user_id = ${uid}`;
+
+    const newSemId = newId();
+    await sql`
+      insert into semesters (id, user_id, course_name, semester_name, start_date, is_active)
+      values (${newSemId}, ${uid}, ${payload.semester.courseName}, ${payload.semester.semesterName}, now()::date, true)
+    `;
+
+    const subjectIdMap = new Map<string, string>();
+    for (const s of payload.subjects) {
+      const newSubId = newId();
+      subjectIdMap.set(s.id, newSubId);
+      await sql`
+        insert into subjects (id, user_id, semester_id, name, code, default_teacher, description)
+        values (${newSubId}, ${uid}, ${newSemId}, ${s.name}, ${s.code}, ${s.defaultTeacher}, ${s.description})
+      `;
+    }
+
+    for (const p of payload.periods) {
+      const mappedSubId = subjectIdMap.get(p.subjectId);
+      if (!mappedSubId) continue;
+      
+      const newPeriodId = newId();
+      await sql`
+        insert into periods (id, user_id, semester_id, subject_id, day_of_week, period_number, start_time, end_time, teacher_name)
+        values (${newPeriodId}, ${uid}, ${newSemId}, ${mappedSubId}, ${p.dayOfWeek}, ${p.periodNumber}, ${p.startTime}, ${p.endTime}, ${p.teacherName})
+      `;
+    }
+
+    return { newSemesterId: newSemId };
+  });

@@ -73,6 +73,7 @@
   - Per-slot teacher override — different faculty for the same subject on different days is fully supported.
   - Conflict prevention and unique indexing over `(user_id, semester_id, day_of_week, period_number)`.
 - **Manage periods from the subject page**: Add, edit, or delete individual period slots directly from the subject detail view — no need to navigate to the Routine tab.
+- **Class Timetable Sharing**: Generate a unique invite link or QR code to share your entire class routine (semester, subjects, and periods) with classmates. They can import it with one tap to instantly set up their own Rollbook.
 - **Routine Archiving**: When the college changes the schedule mid-semester, use _Archive routine & start fresh_ to:
   - Mark the current semester as archived (attendance history preserved).
   - Create a new active semester with all subjects copied over (codes, teachers, and notes intact).
@@ -118,6 +119,7 @@
 - **Custom Ranges**: Define your own break periods with start and end dates directly from Settings. Daily reminders will silently skip delivering during these active periods.
 
 ### 8. Data Portability & Settings
+- **Attendance Summary PDF Export**: Generate a clean, printable monthly or semester attendance report for official college submissions or parent meetings directly from the settings page.
 - **JSON Snapshot Export**: Download complete user data (profile, semesters, timetable, marks, credits) in one portable JSON file. Avatar images are stored separately in the database and are not included in the export.
 - **Snapshot Import / Restore**: Seamless migration across browsers or test devices without data loss. The import validator accepts the current schema and gracefully handles older exports that predate the `description` field on subjects.
 - **Locked Profile View**: Profile details are safely locked in read-only mode to prevent accidental modifications. You must explicitly click the "Edit" button to change your details.

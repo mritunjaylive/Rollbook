@@ -1,5 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Bell, Calendar, Github, Linkedin, Mail, Pencil, Plus, Trash2, Twitter } from "lucide-react";
+import {
+  Bell,
+  Camera,
+  Github,
+  Linkedin,
+  LogOut,
+  Moon,
+  Pencil,
+  Plus,
+  Sun,
+  Trash2,
+  Printer,
+  Twitter,
+  Mail,
+  Calendar,
+} from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
@@ -24,7 +39,7 @@ import { localISODate } from "@/lib/utils";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "2.0.0";
 
 const subscribeToNothing = () => () => {};
 const noGateSessionOnServer = () => false;
@@ -316,6 +331,10 @@ function SettingsPage() {
           </Button>
           <Button variant="outline" onClick={() => fileRef.current?.click()}>
             Import JSON
+          </Button>
+          <Button variant="outline" onClick={() => window.open('/report', '_blank')} className="gap-2">
+            <Printer className="size-4" />
+            PDF Report
           </Button>
           <input
             ref={fileRef}
