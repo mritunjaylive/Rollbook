@@ -158,73 +158,71 @@ export function renderInstallPageHtml(template, { host, url } = {}) {
 }
 
 export function renderWebManifest(hostHeader) {
-  return JSON.stringify(
-    {
-      id: "com.mritunjaylive.rollbook",
-      name: "Rollbook",
-      short_name: "Rollbook",
-      description: "College attendance, routine, and 75% tracker that syncs across devices.",
-      start_url: "/",
-      display: "standalone",
-      orientation: "portrait-primary",
-      background_color: "#fbf8f2",
-      theme_color: "#1f4d47",
-      categories: ["education", "productivity"],
-      prefer_related_applications": false,
-      icons: [
-        {
-          "src": "/rollbook-192.png",
-          "sizes": "192x192",
-          "type": "image/png",
-          "purpose": "any"
-        },
-        {
-          "src": "/rollbook-512.png",
-          "sizes": "512x512",
-          "type": "image/png",
-          "purpose": "any maskable"
-        },
-        {
-          "src": "/__grok/rollbook-180.png",
-          "sizes": "180x180",
-          "type": "image/png",
-          "purpose": "any"
-        }
-      ],
-      "screenshots": [
-        {
-          "src": "/screenshots/desktop-1.png",
-          "sizes": "1368x730",
-          "type": "image/png",
-          "form_factor": "wide",
-          "label": "Rollbook Dashboard on Desktop"
-        },
-        {
-          "src": "/screenshots/mobile-1.png",
-          "sizes": "1080x1900",
-          "type": "image/png",
-          "form_factor": "narrow",
-          "label": "Today's Attendance on Mobile"
-        },
-        {
-          "src": "/screenshots/desktop-2.png",
-          "sizes": "1368x730",
-          "type": "image/png",
-          "form_factor": "wide",
-          "label": "Rollbook Login page on Desktop"
-        },
-        {
-          "src": "/screenshots/mobile-2.png",
-          "sizes": "1080x1891",
-          "type": "image/png",
-          "form_factor": "narrow",
-          "label": "Rollbook Login page on Mobile"
-        }
-      ]
-    },
-    null,
-    2,
-  );
+  const manifest = {
+    id: "com.mritunjaylive.rollbook",
+    name: "Rollbook",
+    short_name: "Rollbook",
+    description: "College attendance, routine, and 75% tracker that syncs across devices.",
+    start_url: "/",
+    display: "standalone",
+    orientation: "portrait-primary",
+    background_color: "#fbf8f2",
+    theme_color: "#1f4d47",
+    categories: ["education", "productivity"],
+    prefer_related_applications: false,
+    icons: [
+      {
+        src: "/rollbook-192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/rollbook-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any maskable",
+      },
+      {
+        src: "/__grok/rollbook-180.png",
+        sizes: "180x180",
+        type: "image/png",
+        purpose: "any",
+      },
+    ],
+    screenshots: [
+      {
+        src: "/screenshots/desktop-1.png",
+        sizes: "1368x730",
+        type: "image/png",
+        form_factor: "wide",
+        label: "Rollbook Dashboard on Desktop",
+      },
+      {
+        src: "/screenshots/mobile-1.png",
+        sizes: "1080x1900",
+        type: "image/png",
+        form_factor: "narrow",
+        label: "Today's Attendance on Mobile",
+      },
+      {
+        src: "/screenshots/desktop-2.png",
+        sizes: "1368x730",
+        type: "image/png",
+        form_factor: "wide",
+        label: "Rollbook Login page on Desktop",
+      },
+      {
+        src: "/screenshots/mobile-2.png",
+        sizes: "1080x1891",
+        type: "image/png",
+        form_factor: "narrow",
+        label: "Rollbook Login page on Mobile",
+      },
+    ],
+  };
+
+  return JSON.stringify(manifest, null, 2);
 }
 
 export function grokPwaHeadTags(appName = DEFAULT_APP_NAME) {
