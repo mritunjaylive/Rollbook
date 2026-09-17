@@ -81,3 +81,55 @@ self.addEventListener("notificationclick", (event) => {
     event.waitUntil(self.clients.openWindow(url || "/"));
   }
 });
+
+self.addEventListener("sync", (event) => {
+  if (event.tag === "sync-attendance") {
+    event.waitUntil(processOfflineQueue());
+  }
+});
+
+async function processOfflineQueue() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open("rollbook-offline-sync", 1);
+    
+    request.onerror = () => reject(request.error);
+    
+    request.onsuccess = async (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains("sync-queue")) {
+        return resolve();
+      }
+      
+      const tx = db.transaction("sync-queue", "readwrite");
+      const store = tx.objectStore("sync-queue");
+      const getAllRequest = store.getAll();
+      
+      getAllRequest.onsuccess = async () => {
+        const queue = getAllRequest.result;
+        for (const item of queue) {
+          try {
+            const res = await fetch(item.url, {
+              method: item.method,
+              headers: item.headers,
+              body: item.body,
+              credentials: "same-origin"
+            });
+            if (res.ok || (res.status >= 400 && res.status < 500)) {
+              // Delete from IDB using another transaction to avoid tx closing issues
+              await new Promise((delResolve) => {
+                const delTx = db.transaction("sync-queue", "readwrite");
+                delTx.objectStore("sync-queue").delete(item.id).onsuccess = delResolve;
+              });
+            }
+          } catch (err) {
+            console.error("SW sync failed for item:", item, err);
+            break; // Stop on network failure to maintain order
+          }
+        }
+        resolve();
+      };
+      
+      getAllRequest.onerror = () => reject(getAllRequest.error);
+    };
+  });
+}

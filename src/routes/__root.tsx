@@ -10,6 +10,7 @@ import {
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { AppProviders } from "@/components/providers";
+import { processOfflineQueue } from "@/lib/idb";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "Rollbook";
@@ -62,6 +63,15 @@ function Root() {
   useEffect(() => {
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+
+    if (typeof window !== "undefined") {
+      // Process queue immediately in case there are pending items and we are online (iOS fallback)
+      void processOfflineQueue();
+      
+      const handleOnline = () => { void processOfflineQueue(); };
+      window.addEventListener("online", handleOnline);
+      return () => window.removeEventListener("online", handleOnline);
     }
   }, []);
 

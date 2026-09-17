@@ -1,4 +1,5 @@
 import { InstallPrompt } from "@/components/install-prompt";
+import { BackButtonHandler } from "@/components/back-button-handler";
 import { Link, Navigate, useRouterState } from "@tanstack/react-router";
 import {
   BookOpen,
@@ -69,6 +70,7 @@ export function AppShell({
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-5xl flex-col bg-paper">
+      <BackButtonHandler />
       <header className="sticky top-0 z-20 border-b border-line/80 bg-paper/90 px-4 py-3 backdrop-blur-md pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between gap-3">
 
@@ -115,6 +117,7 @@ export function AppShell({
                 <li key={item.to}>
                   <Link
                     to={item.to}
+                    replace
                     className={cn(
                       "flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium",
                       on ? "text-accent" : "text-ink-faint hover:text-ink",

@@ -7,6 +7,7 @@ import type {
   CreditType,
   Snapshot,
 } from "./types";
+import { saveToOfflineQueue } from "../idb";
 
 export const SNAPSHOT_KEY = ["rollbook-snapshot"] as const;
 
@@ -134,20 +135,60 @@ export function useRollbookMutations() {
   });
 
   const markAttendance = useMutation({
-    mutationFn: (data: {
+    mutationFn: async (data: {
       periodId: string;
       date: string;
       status: AttendanceStatus;
-    }) => api.markAttendance({ data }),
+    }) => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        await saveToOfflineQueue({
+          url: "/api/sync",
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "markAttendance", data }),
+        });
+        if ("serviceWorker" in navigator) {
+          try {
+            const reg = await navigator.serviceWorker.ready;
+            // @ts-expect-error sync is not strictly typed in standard lib
+            if (reg.sync) await reg.sync.register("sync-attendance");
+          } catch (e) {
+            console.error("Failed to register sync", e);
+          }
+        }
+        return null; // Optimistic return
+      }
+      return api.markAttendance({ data });
+    },
     onSuccess: () => invalidate(),
   });
 
   const markDayStatus = useMutation({
-    mutationFn: (data: {
+    mutationFn: async (data: {
       date: string;
       status: AttendanceStatus;
       periodIds: string[];
-    }) => api.markDayStatus({ data }),
+    }) => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        await saveToOfflineQueue({
+          url: "/api/sync",
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "markDayStatus", data }),
+        });
+        if ("serviceWorker" in navigator) {
+          try {
+            const reg = await navigator.serviceWorker.ready;
+            // @ts-expect-error sync is not strictly typed in standard lib
+            if (reg.sync) await reg.sync.register("sync-attendance");
+          } catch (e) {
+            console.error("Failed to register sync", e);
+          }
+        }
+        return null;
+      }
+      return api.markDayStatus({ data });
+    },
     onSuccess: () => invalidate(),
   });
 
