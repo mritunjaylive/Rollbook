@@ -39,7 +39,7 @@ import { localISODate } from "@/lib/utils";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
-const APP_VERSION = "2.0.0";
+const APP_VERSION = "2.1.0";
 
 const subscribeToNothing = () => () => {};
 const noGateSessionOnServer = () => false;

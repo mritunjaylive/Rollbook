@@ -47,6 +47,8 @@
 - **Recovery calculations** ("How many consecutive classes must I attend to recover my standing?").
 - **Routine archiving** — when the college changes the timetable mid-semester, archive the old routine and start fresh while keeping all historical attendance data intact.
 - **Offline-ready and zero-setup local storage** using **PGLite** (Postgres in WASM) when running locally or in development, with frictionless migration to **Neon Serverless PostgreSQL** in production.
+- **Background Sync API Integration** — Seamlessly marks your attendance while disconnected and automatically syncs in the background when connectivity returns.
+- **Native-Like App Feeling** — Clean PWA history management with an Android-style exit interceptor (press back twice to exit) instead of infinite back button loops.
 
 ---
 
@@ -64,6 +66,7 @@
   - Safe Bunk Allowance ($B$).
   - Classes needed to recover ($N_{\text{attend}}$).
   - **Safe / Unsafe Badges**: Instantly see if you are above or below your attendance threshold with visual indicator badges on each subject.
+- **Offline Marking Queue**: Marks your attendance securely using IndexedDB when cellular connectivity is poor. A Service Worker background sync automatically uploads your pending queue as soon as you reconnect, even if you've closed the app.
 
 ### 2. Timetable & Schedule Management
 - **Semester Structure**: Organize academic sessions with start dates, course name, semester title, and active flags.
