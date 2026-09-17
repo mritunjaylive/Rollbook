@@ -158,24 +158,69 @@ export function renderInstallPageHtml(template, { host, url } = {}) {
 }
 
 export function renderWebManifest(hostHeader) {
-  const name = appNameFromHost(hostHeader);
   return JSON.stringify(
     {
-      name,
-      short_name: name,
-      id: "/",
+      id: "com.mritunjaylive.rollbook",
+      name: "Rollbook",
+      short_name: "Rollbook",
+      description: "College attendance, routine, and 75% tracker that syncs across devices.",
       start_url: "/",
-      scope: "/",
       display: "standalone",
-      background_color: "#000000",
-      theme_color: "#000000",
+      orientation: "portrait-primary",
+      background_color: "#fbf8f2",
+      theme_color: "#1f4d47",
+      categories: ["education", "productivity"],
+      prefer_related_applications": false,
       icons: [
         {
-          src: "/__grok/icon-180.png",
-          sizes: "180x180",
-          type: "image/png",
+          "src": "/rollbook-192.png",
+          "sizes": "192x192",
+          "type": "image/png",
+          "purpose": "any"
         },
+        {
+          "src": "/rollbook-512.png",
+          "sizes": "512x512",
+          "type": "image/png",
+          "purpose": "any maskable"
+        },
+        {
+          "src": "/__grok/rollbook-180.png",
+          "sizes": "180x180",
+          "type": "image/png",
+          "purpose": "any"
+        }
       ],
+      "screenshots": [
+        {
+          "src": "/screenshots/desktop-1.png",
+          "sizes": "1368x730",
+          "type": "image/png",
+          "form_factor": "wide",
+          "label": "Rollbook Dashboard on Desktop"
+        },
+        {
+          "src": "/screenshots/mobile-1.png",
+          "sizes": "1080x1900",
+          "type": "image/png",
+          "form_factor": "narrow",
+          "label": "Today's Attendance on Mobile"
+        }
+        {
+          "src": "/screenshots/desktop-2.png",
+          "sizes": "1368x730",
+          "type": "image/png",
+          "form_factor": "wide",
+          "label": "Rollbook Login page on Desktop"
+        },
+        {
+          "src": "/screenshots/mobile-2.png",
+          "sizes": "1080x1891",
+          "type": "image/png",
+          "form_factor": "narrow",
+          "label": "Rollbook Login page on Mobile"
+        }
+      ]
     },
     null,
     2,
@@ -186,8 +231,8 @@ export function grokPwaHeadTags(appName = DEFAULT_APP_NAME) {
   return [
     // Standalone display comes from the manifest ("display": "standalone");
     // the legacy *-web-app-capable metas it replaces are deliberately absent.
-    ["manifest", '<link rel="manifest" href="/__grok/manifest.webmanifest">'],
-    ["apple-touch-icon", '<link rel="apple-touch-icon" href="/__grok/icon-180.png">'],
+    ["manifest", '<link rel="manifest" href="/manifest.json">'],
+    ["apple-touch-icon", '<link rel="apple-touch-icon" href="/__grok/rollbook-180.png">'],
     [
       "apple-mobile-web-app-title",
       `<meta name="apple-mobile-web-app-title" content="${escapeHtml(appName)}">`,
@@ -436,8 +481,8 @@ export function injectGrokPwaHead(html, ctx = {}) {
 
   const missing = grokPwaHeadTags(appName)
     .filter(([key]) => {
-      if (key === "manifest") return !next.includes('href="/__grok/manifest.webmanifest"');
-      if (key === "apple-touch-icon") return !next.includes('href="/__grok/icon-180.png"');
+      if (key === "manifest") return !next.includes('rel="manifest"');
+      if (key === "apple-touch-icon") return !next.includes('href="/__grok/rollbook-180.png"');
       return !next.includes(`name="${key}"`);
     })
     .map(([, tag]) => tag);
