@@ -67,7 +67,7 @@ function Login() {
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-accent">
           College attendance
         </p>
-        <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight text-ink">
+        <h1 className="mt-2 font-brand text-4xl font-semibold tracking-widest text-ink">
           Rollbook
         </h1>
         <p className="mt-3 max-w-[34ch] text-ink-soft">
