@@ -27,6 +27,7 @@
 - [Attendance & Bunk Algorithms](#attendance--bunk-algorithms)
   - [Mathematical Formulations](#mathematical-formulations)
 - [Authentication & Security](#authentication--security)
+- [PWA & Offline](#pwa--offline)
 - [Getting Started & Development](#getting-started--development)
   - [Prerequisites](#prerequisites)
   - [Environment Variables](#environment-variables)
@@ -179,12 +180,15 @@
 ```
 Rollbook/
 ├── migrations/                     # SQL migration files
-│   ├── 0001_auth.sql              # Better Auth tables (camelCase schema)
+│   ├── 0001_auth.sql              # Better Auth tables
 │   ├── 0002_rollbook.sql          # Rollbook entities (profiles, semesters, etc.)
 │   ├── 0003_subject_description.sql # Adds description column to subjects
 │   ├── 0004_avatar.sql            # Adds avatar_data column to profiles
+│   ├── 0005_activities.sql        # Activities and events logging
+│   ├── 0007_holidays.sql          # Holiday ranges and pauses
+│   ├── 0008_shared_routines.sql   # Class timetable sharing payloads
 │   └── auth/                      # Upstream auth definitions
-├── public/                         # Static assets, PWA icons, manifest
+├── public/                         # Static assets, PWA icons, manifest, sw.js
 ├── scripts/                        # Database migration, preview & test runners
 │   ├── migrate.mjs                # Production migration executor
 │   ├── migration-plan.mjs         # Migration diffing & sequencing
@@ -193,16 +197,19 @@ Rollbook/
 │   ├── components/                # Modular UI components
 │   │   ├── ui/                    # Base primitives (Button, Card, Dialog, Input)
 │   │   ├── app-shell.tsx          # Navigation header, sidebar, user controls
+│   │   ├── back-button-handler.tsx# Android-style native PWA back interceptor
 │   │   ├── credit-form.tsx        # Dialog to grant & save teacher credits
 │   │   ├── install-prompt.tsx     # PWA "Add to Home Screen" banner
 │   │   ├── mark-pad.tsx           # Quick-marking pad for attendance
 │   │   ├── percent-ring.tsx       # SVG circular progress ring for attendance %
 │   │   ├── profile-avatar.tsx     # Avatar component (photo or initial fallback)
+│   │   ├── share-dialog.tsx       # QR code and invite link generator
 │   │   └── stats-line.tsx         # Metric summary badges
 │   ├── lib/
 │   │   ├── auth/                  # Better Auth server, client, middleware & hooks
 │   │   ├── db.ts                  # Dual-source SQL driver (PGLite vs Neon)
 │   │   ├── env.server.ts          # Server environment validation
+│   │   ├── idb.ts                 # IndexedDB wrapper for offline queue
 │   │   └── rollbook/              # Core business logic
 │   │       ├── api.ts             # Server functions (RPC endpoints)
 │   │       ├── derive.ts          # Snapshot subject & semester aggregations
@@ -216,8 +223,11 @@ Rollbook/
 │   │   ├── subjects.$subjectId.tsx# Subject detailed breakdown
 │   │   ├── timetable.tsx          # Weekly schedule editor
 │   │   ├── calendar.tsx           # Monthly attendance log
+│   │   ├── report.tsx             # Printable PDF attendance summary
+│   │   ├── invite.$inviteId.tsx   # Timetable sharing import landing page
 │   │   ├── settings.tsx           # Profile settings, threshold, data import/export
-│   │   └── api/auth/$.ts          # Better Auth HTTP handler catch-all
+│   │   ├── api/auth/$.ts          # Better Auth HTTP handler catch-all
+│   │   └── api/sync.ts            # Background sync endpoint for offline queue
 │   ├── router.tsx                 # Router instance creation
 │   └── styles.css                 # Tailwind CSS 4 style tokens
 ├── package.json
@@ -324,6 +334,38 @@ CREATE TABLE credit_grants (
   teacher_name TEXT NOT NULL DEFAULT '',
   granted_on DATE NOT NULL,
   note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 7. Activities (Extracurricular Participation)
+CREATE TABLE activities (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  name TEXT NOT NULL,
+  activity_date DATE NOT NULL,
+  start_time TEXT NOT NULL,
+  end_time TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  credits INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 8. Holidays (Exam / Vacation Mode)
+CREATE TABLE holidays (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 9. Shared Routines (Timetable Invites)
+CREATE TABLE shared_routines (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  payload TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
