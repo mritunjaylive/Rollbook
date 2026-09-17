@@ -59,6 +59,7 @@ function TimetablePage() {
         <div>
           <h1 className="font-display text-3xl font-semibold">Routine</h1>
           <p className="text-sm text-ink-soft">Monday–Saturday. Different papers, different hours.</p>
+        </div>
         <div className="flex gap-2">
           <Button
             variant="outline"
