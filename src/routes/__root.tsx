@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Analytics } from "@vercel/analytics/react";
 import { createServerFn } from "@tanstack/react-start";
 import {
@@ -53,6 +54,12 @@ export const Route = createRootRoute({
 });
 
 function Root() {
+  useEffect(() => {
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  }, []);
+
   return (
     <html lang="en" className="antialiased" suppressHydrationWarning>
       <head>
