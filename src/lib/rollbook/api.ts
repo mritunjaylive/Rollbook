@@ -70,6 +70,13 @@ type CreditRow = {
   granted_on: string;
   note: string | null;
 };
+type ActivityRow = {
+  id: string;
+  kind: ActivityKind;
+  name: string;
+  activity_date: string;
+  start_time: string;
+  end_time: string;
   description: string;
   credits: number | null;
 };
