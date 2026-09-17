@@ -159,7 +159,7 @@ function SettingsPage() {
           Pause routine notifications during breaks or exams.
         </p>
         <ul className="mt-3 space-y-2">
-          {snapshot?.holidays.length === 0 ? (
+          {!snapshot?.holidays?.length ? (
             <p className="text-sm text-ink-faint">No upcoming holidays scheduled.</p>
           ) : (
             snapshot?.holidays.map((h) => (

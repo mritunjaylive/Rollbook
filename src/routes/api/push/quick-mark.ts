@@ -14,7 +14,7 @@ export const Route = createFileRoute("/api/push/quick-mark")({
           }
 
           const token = authHeader.substring(7);
-          const secret = new TextEncoder().encode(process.env.BETTER_AUTH_SECRET);
+          const secret = new TextEncoder().encode(process.env.BETTER_AUTH_SECRET || "");
           
           const { payload } = await jose.jwtVerify<{ userId: string }>(token, secret);
           const userId = payload.userId;

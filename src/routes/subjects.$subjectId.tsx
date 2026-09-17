@@ -15,7 +15,7 @@ import { CREDIT_TYPES, WEEKDAYS, weekdayName } from "@/lib/rollbook/days";
 import { statsForSubject } from "@/lib/rollbook/derive";
 import { selectActive, useRollbookMutations, useSnapshot } from "@/lib/rollbook/queries";
 import { computeStats, projectedCredit } from "@/lib/rollbook/stats";
-import type { Period, Subject } from "@/lib/rollbook/types";
+import type { AttendanceStats, Period, Subject } from "@/lib/rollbook/types";
 import { parseISODate } from "@/lib/utils";
 
 export const Route = createFileRoute("/subjects/$subjectId")({
@@ -555,7 +555,7 @@ function PeriodDialog({
 
 // ── Margin Predictor ───────────────────────────────────────────────────────────
 
-function BunkPredictor({ stats, threshold }: { stats: any; threshold: number }) {
+function BunkPredictor({ stats, threshold }: { stats: AttendanceStats; threshold: number }) {
   const [offset, setOffset] = useState(0); // negative = miss, positive = attend
 
   const simulatedPresent = stats.present + (offset > 0 ? offset : 0);

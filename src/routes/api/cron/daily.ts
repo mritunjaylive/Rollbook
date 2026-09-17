@@ -58,7 +58,7 @@ export const Route = createFileRoute("/api/cron/daily")({
           )
         `;
 
-        const secret = new TextEncoder().encode(process.env.BETTER_AUTH_SECRET);
+        const secret = new TextEncoder().encode(process.env.BETTER_AUTH_SECRET || "");
 
         const notifications = subscriptions.map(async (sub) => {
           // Sign a JWT valid for 24 hours
