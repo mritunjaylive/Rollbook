@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Bell, Github, Linkedin, Mail, Pencil, Twitter } from "lucide-react";
+import { Bell, Calendar, Github, Linkedin, Mail, Pencil, Plus, Trash2, Twitter } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
@@ -24,7 +24,7 @@ import { localISODate } from "@/lib/utils";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.3.0";
 
 const subscribeToNothing = () => () => {};
 const noGateSessionOnServer = () => false;
@@ -37,6 +37,7 @@ function SettingsPage() {
   const mut = useRollbookMutations();
   const fileRef = useRef<HTMLInputElement>(null);
   const [semOpen, setSemOpen] = useState(false);
+  const [holidayOpen, setHolidayOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const profile = snapshot?.profile;
 
@@ -145,6 +146,50 @@ function SettingsPage() {
       ) : null}
 
       <ParticipationList activities={snapshot?.activities ?? []} />
+
+      <section className="mt-8">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-display text-xl font-semibold">Holiday & Exam Mode</h2>
+          <Button size="sm" variant="secondary" onClick={() => setHolidayOpen(true)}>
+            <Plus className="mr-2 size-4" />
+            Add
+          </Button>
+        </div>
+        <p className="mt-1 text-sm text-ink-soft">
+          Pause routine notifications during breaks or exams.
+        </p>
+        <ul className="mt-3 space-y-2">
+          {snapshot?.holidays.length === 0 ? (
+            <p className="text-sm text-ink-faint">No upcoming holidays scheduled.</p>
+          ) : (
+            snapshot?.holidays.map((h) => (
+              <li key={h.id}>
+                <Card className="flex items-center justify-between gap-3 p-3">
+                  <div>
+                    <p className="font-medium text-ink">{h.name}</p>
+                    <p className="text-xs text-ink-faint">
+                      {h.startDate} to {h.endDate}
+                    </p>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="text-warn hover:bg-warn-soft"
+                    onClick={async () => {
+                      if (confirm("Delete this holiday?")) {
+                        await mut.deleteHoliday.mutateAsync(h.id);
+                        toast.success("Holiday deleted");
+                      }
+                    }}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </Card>
+              </li>
+            ))
+          )}
+        </ul>
+      </section>
 
       <section className="mt-8">
         <div className="flex items-center justify-between gap-3">
@@ -367,6 +412,7 @@ function SettingsPage() {
       </section>
 
       <NewSemesterDialog open={semOpen} onOpenChange={setSemOpen} />
+      <NewHolidayDialog open={holidayOpen} onOpenChange={setHolidayOpen} />
     </AppShell>
   );
 }
@@ -547,6 +593,57 @@ function NewSemesterDialog({
         </Field>
         <Button type="submit" className="w-full">
           Create and switch
+        </Button>
+      </form>
+    </Dialog>
+  );
+}
+
+function NewHolidayDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const mut = useRollbookMutations();
+  const [name, setName] = useState("");
+  const [startDate, setStartDate] = useState(localISODate());
+  const [endDate, setEndDate] = useState(localISODate());
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title="New break or exam">
+      <form
+        className="space-y-3"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (startDate > endDate) {
+            toast.error("End date cannot be before start date.");
+            return;
+          }
+          await mut.upsertHoliday.mutateAsync({
+            name,
+            startDate,
+            endDate,
+          });
+          setName("");
+          setStartDate(localISODate());
+          setEndDate(localISODate());
+          onOpenChange(false);
+          toast.success("Holiday created.");
+        }}
+      >
+        <Field label="Description">
+          <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Mid-sem break" />
+        </Field>
+        <Field label="Start date">
+          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+        </Field>
+        <Field label="End date">
+          <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
+        </Field>
+        <Button type="submit" className="w-full">
+          Save holiday
         </Button>
       </form>
     </Dialog>

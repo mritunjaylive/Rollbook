@@ -68,6 +68,13 @@ export type Activity = {
   credits: number | null;
 };
 
+export type Holiday = {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+};
+
 export type Snapshot = {
   profile: Profile | null;
   semesters: Semester[];
@@ -76,6 +83,7 @@ export type Snapshot = {
   attendance: AttendanceEntry[];
   credits: CreditGrant[];
   activities: Activity[];
+  holidays: Holiday[];
 };
 
 export type AttendanceStats = {

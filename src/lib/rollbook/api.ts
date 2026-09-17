@@ -70,15 +70,14 @@ type CreditRow = {
   granted_on: string;
   note: string | null;
 };
-type ActivityRow = {
-  id: string;
-  kind: ActivityKind;
-  name: string;
-  activity_date: string;
-  start_time: string;
-  end_time: string;
   description: string;
   credits: number | null;
+};
+type HolidayRow = {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
 };
 
 function mapProfile(r: ProfileRow): Profile {
@@ -154,6 +153,14 @@ function mapActivity(r: ActivityRow): Activity {
     credits: r.credits == null ? null : Number(r.credits),
   };
 }
+function mapHoliday(r: HolidayRow) {
+  return {
+    id: r.id,
+    name: r.name,
+    startDate: r.start_date,
+    endDate: r.end_date,
+  };
+}
 
 function isUniqueViolation(err: unknown) {
   const msg = err instanceof Error ? err.message : String(err);
@@ -174,6 +181,7 @@ export const getSnapshot = createServerFn({ method: "GET" })
         sql<AttendanceRow>`select id, period_id, date, status from attendance where user_id = ${uid}`,
         sql<CreditRow>`select id, subject_id, amount, type, teacher_name, granted_on, note from credit_grants where user_id = ${uid} order by granted_on desc`,
         sql<ActivityRow>`select id, kind, name, activity_date, start_time, end_time, description, credits from activities where user_id = ${uid} order by activity_date desc, start_time desc`,
+        sql<HolidayRow>`select id, name, start_date, end_date from holidays where user_id = ${uid} order by start_date desc`,
       ]);
     return {
       profile: profiles[0] ? mapProfile(profiles[0]) : null,
@@ -183,6 +191,7 @@ export const getSnapshot = createServerFn({ method: "GET" })
       attendance: attendance.map(mapAttendance),
       credits: credits.map(mapCredit),
       activities: activities.map(mapActivity),
+      holidays: holidays.map(mapHoliday),
     };
   });
 
@@ -607,6 +616,44 @@ export const deleteActivity = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+const holidayInput = z.object({
+  id: z.string().optional(),
+  name: z.string().trim().min(1).max(100),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+export const upsertHoliday = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: unknown) => holidayInput.parse(d))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const uid = context.userId;
+    const id = data.id ?? newId();
+    if (data.id) {
+      await sql`
+        update holidays
+        set name = ${data.name}, start_date = ${data.startDate}, end_date = ${data.endDate}
+        where id = ${id} and user_id = ${uid}
+      `;
+    } else {
+      await sql`
+        insert into holidays (id, user_id, name, start_date, end_date)
+        values (${id}, ${uid}, ${data.name}, ${data.startDate}, ${data.endDate})
+      `;
+    }
+    return { id };
+  });
+
+export const deleteHoliday = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: unknown) => z.object({ id: z.string() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await sql`delete from holidays where id = ${data.id} and user_id = ${context.userId}`;
+    return { ok: true as const };
+  });
+
 // ── Avatar ────────────────────────────────────────────────────────────────────
 // avatar_data is stored in the profiles table (0004_avatar.sql) but NEVER
 // fetched by getSnapshot — it is only read via GET /api/avatar, which sets
@@ -735,6 +782,16 @@ const importSchema = z.object({
       }),
     )
     .default([]),
+  holidays: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        startDate: z.string(),
+        endDate: z.string(),
+      }),
+    )
+    .default([]),
 });
 
 export const importSnapshot = createServerFn({ method: "POST" })
@@ -743,6 +800,7 @@ export const importSnapshot = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const uid = context.userId;
+    await sql`delete from holidays where user_id = ${uid}`;
     await sql`delete from activities where user_id = ${uid}`;
     await sql`delete from credit_grants where user_id = ${uid}`;
     await sql`delete from attendance where user_id = ${uid}`;
@@ -792,6 +850,12 @@ export const importSnapshot = createServerFn({ method: "POST" })
       await sql`
         insert into activities (id, user_id, kind, name, activity_date, start_time, end_time, description, credits)
         values (${a.id}, ${uid}, ${a.kind}, ${a.name}, ${a.activityDate}, ${a.startTime}, ${a.endTime}, ${a.description}, ${a.credits})
+      `;
+    }
+    for (const h of data.holidays) {
+      await sql`
+        insert into holidays (id, user_id, name, start_date, end_date)
+        values (${h.id}, ${uid}, ${h.name}, ${h.startDate}, ${h.endDate})
       `;
     }
     return { ok: true as const };

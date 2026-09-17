@@ -14,6 +14,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { CREDIT_TYPES, WEEKDAYS, weekdayName } from "@/lib/rollbook/days";
 import { statsForSubject } from "@/lib/rollbook/derive";
 import { selectActive, useRollbookMutations, useSnapshot } from "@/lib/rollbook/queries";
+import { computeStats, projectedCredit } from "@/lib/rollbook/stats";
 import type { Period, Subject } from "@/lib/rollbook/types";
 import { parseISODate } from "@/lib/utils";
 
@@ -112,6 +113,14 @@ function SubjectDetailPage() {
         <PercentRing value={stats.rawPercent} safe={stats.creditNeeded === 0} label="This paper" />
         <StatsLine stats={stats} />
       </section>
+
+      {/* ── Margin Predictor ── */}
+      <section className="mt-8">
+        <h2 className="font-display text-xl font-semibold mb-3">Margin Predictor</h2>
+        <BunkPredictor stats={stats} threshold={threshold} />
+      </section>
+
+
 
       {noMore && stats.creditNeeded > 0 ? (
         <p className="mt-4 rounded-[var(--radius-md)] bg-warn-soft px-3 py-2 text-sm text-warn">
@@ -541,5 +550,70 @@ function PeriodDialog({
         </div>
       </form>
     </Dialog>
+  );
+}
+
+// ── Margin Predictor ───────────────────────────────────────────────────────────
+
+function BunkPredictor({ stats, threshold }: { stats: any; threshold: number }) {
+  const [offset, setOffset] = useState(0); // negative = miss, positive = attend
+
+  const simulatedPresent = stats.present + (offset > 0 ? offset : 0);
+  const simulatedAbsent = stats.absent + (offset < 0 ? Math.abs(offset) : 0);
+  const simulated = computeStats(simulatedPresent, simulatedAbsent, stats.teacherCredit, threshold, {
+    holiday: stats.holiday,
+    cancelled: stats.cancelled,
+  });
+
+  const isSafe = simulated.creditNeeded === 0;
+
+  return (
+    <Card className="p-4 bg-paper/50">
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-ink-soft">Simulate upcoming classes</p>
+          <div className="flex items-center gap-3 bg-paper rounded-[var(--radius-sm)] px-2 py-1 border border-line">
+            <button
+              onClick={() => setOffset((o) => o - 1)}
+              className="text-warn hover:opacity-80 font-bold px-2"
+              aria-label="Skip a class"
+            >
+              - Skip
+            </button>
+            <span className="tabular-nums font-medium min-w-4 text-center">
+              {offset > 0 ? `+${offset}` : offset}
+            </span>
+            <button
+              onClick={() => setOffset((o) => o + 1)}
+              className="text-safe hover:opacity-80 font-bold px-2"
+              aria-label="Attend a class"
+            >
+              + Attend
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-2 border-t border-line border-dashed">
+          <div>
+            <p className="text-xs text-ink-faint uppercase tracking-wider">Projected %</p>
+            <p className={`text-xl font-display font-semibold ${isSafe ? "text-safe" : "text-warn"}`}>
+              {simulated.effectivePercent !== null ? simulated.effectivePercent.toFixed(1) : "0.0"}%
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-ink-faint uppercase tracking-wider">Status</p>
+            <p className={`text-sm font-medium ${isSafe ? "text-safe" : "text-warn"}`}>
+              {isSafe ? "Safe" : `Short by ${simulated.creditNeeded}`}
+            </p>
+          </div>
+        </div>
+
+        {offset !== 0 && (
+          <Button variant="ghost" size="sm" onClick={() => setOffset(0)} className="text-xs mt-1 self-start">
+            Reset
+          </Button>
+        )}
+      </div>
+    </Card>
   );
 }

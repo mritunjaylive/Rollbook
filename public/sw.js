@@ -50,12 +50,34 @@ self.addEventListener("push", (event) => {
     body: data.body || "You have a new update.",
     icon: "/rollbook-192.png",
     badge: "/favicon.svg",
-    data: data.url || "/",
+    data: data.data || "/",
+    actions: data.actions || [],
   };
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  event.waitUntil(self.clients.openWindow(event.notification.data));
+  const action = event.action;
+  const payloadData = event.notification.data;
+  
+  if (action === "mark_all_present" || action === "mark_sick") {
+    const token = payloadData?.token;
+    if (token) {
+      event.waitUntil(
+        fetch("/api/push/quick-mark", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({ action })
+        }).catch(err => console.error("Quick mark failed:", err))
+      );
+    }
+  } else {
+    // default action or view_routine
+    const url = typeof payloadData === "object" ? payloadData.url : payloadData;
+    event.waitUntil(self.clients.openWindow(url || "/"));
+  }
 });

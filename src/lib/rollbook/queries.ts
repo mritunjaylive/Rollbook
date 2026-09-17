@@ -205,6 +205,21 @@ export function useRollbookMutations() {
     onSuccess: () => invalidate(),
   });
 
+  const upsertHoliday = useMutation({
+    mutationFn: (data: {
+      id?: string;
+      name: string;
+      startDate: string;
+      endDate: string;
+    }) => api.upsertHoliday({ data }),
+    onSuccess: () => invalidate(),
+  });
+
+  const deleteHoliday = useMutation({
+    mutationFn: (id: string) => api.deleteHoliday({ data: { id } }),
+    onSuccess: () => invalidate(),
+  });
+
   return {
     upsertProfile,
     upsertSemester,
@@ -224,5 +239,7 @@ export function useRollbookMutations() {
     deleteActivity,
     importSnapshot,
     archiveRoutine,
+    upsertHoliday,
+    deleteHoliday,
   };
 }

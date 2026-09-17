@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import webpush from "web-push";
+import * as jose from "jose";
 
 // If VAPID keys are provided in env, configure web-push
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
@@ -37,6 +38,7 @@ export const Route = createFileRoute("/api/cron/daily")({
         // For demonstration, we'll send a general "Don't forget to mark attendance!" message
         // Or if we can do a simplified alert:
         
+        // Check for active holidays for current date
         const subscriptions = await sql<{
           id: string;
           user_id: string;
@@ -48,13 +50,36 @@ export const Route = createFileRoute("/api/cron/daily")({
           select p.endpoint, p.p256dh, p.auth, p.user_id, pr.student_name
           from push_subscriptions p
           join profiles pr on p.user_id = pr.user_id
+          where not exists (
+            select 1 from holidays h
+            where h.user_id = p.user_id
+              and h.start_date <= current_date
+              and h.end_date >= current_date
+          )
         `;
 
-        const notifications = subscriptions.map((sub) => {
+        const secret = new TextEncoder().encode(process.env.BETTER_AUTH_SECRET);
+
+        const notifications = subscriptions.map(async (sub) => {
+          // Sign a JWT valid for 24 hours
+          const token = await new jose.SignJWT({ userId: sub.user_id })
+            .setProtectedHeader({ alg: "HS256" })
+            .setIssuedAt()
+            .setExpirationTime("24h")
+            .sign(secret);
+
           const payload = JSON.stringify({
             title: "Good Morning!",
             body: `Hi ${sub.student_name}, check your classes for today!`,
-            url: "/",
+            data: {
+              url: "/",
+              token,
+            },
+            actions: [
+              { action: "mark_all_present", title: "Mark All Present" },
+              { action: "mark_sick", title: "Sick Day" },
+              { action: "view_routine", title: "View Routine" },
+            ]
           });
 
           return webpush

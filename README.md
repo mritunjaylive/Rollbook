@@ -14,8 +14,9 @@
   - [4. Teacher Credit System](#4-teacher-credit-system)
   - [5. Visual Analytics & Calendar](#5-visual-analytics--calendar)
   - [6. Extracurricular Participation Tracking](#6-extracurricular-participation-tracking)
-  - [7. Data Portability & Settings](#7-data-portability--settings)
-  - [8. Notifications & Alerts](#8-notifications--alerts)
+  - [7. Holiday & Exam Mode](#7-holiday--exam-mode)
+  - [8. Data Portability & Settings](#8-data-portability--settings)
+  - [9. Notifications & Smart Alerts](#9-notifications--smart-alerts)
 - [System Architecture](#system-architecture)
   - [High-Level Architecture Diagram](#high-level-architecture-diagram)
   - [Directory Structure](#directory-structure)
@@ -83,9 +84,10 @@
 - **Raw vs. Effective Attendance**:
   - **Raw %**: Represents actual physical presence $\frac{\text{Present}}{\text{Hosted}} \times 100$.
   - **Effective %**: Adjusts for academic credits $\frac{\text{Present} + \text{Credits}}{\text{Hosted}} \times 100$.
-- **Predictive Calculations**:
-  - Automatically calculates whether a student is "In the Clear" or "At Risk".
-  - Predicts new percentage for next mark (e.g., if you attend or miss next class).
+  - **Predictive Calculations**:
+    - Automatically calculates whether a student is "In the Clear" or "At Risk".
+    - Predicts new percentage for next mark (e.g., if you attend or miss next class).
+  - **Margin Predictor**: An interactive simulator on every subject page where you can simulate skipping or attending upcoming classes to dynamically see how your "Safe" status changes in real time.
 
 ### 4. Teacher Credit System
 - **Academic Grace Credits**: Teachers often grant compensatory attendance for extracurriculars, project completions, or assignment submissions.
@@ -111,7 +113,11 @@
 - **Activity Log**: Keep a dated log of workshops, fests, games, and other events you took part in.
 - **Credit Integration**: Optionally associate participation events with credit points to keep a holistic view of your academic and extracurricular standing.
 
-### 7. Data Portability & Settings
+### 7. Holiday & Exam Mode
+- **Pause Tracking**: Automatically pause notifications and strict tracking during college breaks, festivals, or exam weeks.
+- **Custom Ranges**: Define your own break periods with start and end dates directly from Settings. Daily reminders will silently skip delivering during these active periods.
+
+### 8. Data Portability & Settings
 - **JSON Snapshot Export**: Download complete user data (profile, semesters, timetable, marks, credits) in one portable JSON file. Avatar images are stored separately in the database and are not included in the export.
 - **Snapshot Import / Restore**: Seamless migration across browsers or test devices without data loss. The import validator accepts the current schema and gracefully handles older exports that predate the `description` field on subjects.
 - **Locked Profile View**: Profile details are safely locked in read-only mode to prevent accidental modifications. You must explicitly click the "Edit" button to change your details.
@@ -120,9 +126,12 @@
 - **Profile Picture**: Upload a photo (max 50 KB) from the Settings → Profile section. The image is stored in the database and served via `/api/avatar` with a 24-hour browser cache — downloaded once, served from disk cache on every subsequent load.
 - **PWA Install Prompt**: When the browser supports it, a non-intrusive banner offers to add Rollbook to the home screen for standalone, offline-ready access. The prompt is suppressed once the app is already installed or the user dismisses it.
 
-### 8. Notifications & Alerts
+### 9. Notifications & Smart Alerts
 - **Welcome Email**: New users automatically receive a customized welcome email on registration via Resend.
 - **Push Notifications (Web Push)**: Subscribe to daily class summaries at 7:00 AM IST and get alerts if your attendance drops below your threshold. Works natively on browsers and mobile devices when installed as a PWA. (Requires VAPID keys and Vercel Cron).
+- **Smart Notification Actions**: Morning push notifications include quick-action buttons directly in the notification drawer:
+  - **"Mark All Present"** and **"Sick Day"** allow you to instantly mark attendance for the whole day without opening the app!
+  - Built securely using zero-click background sync and temporary JWTs.
 
 ---
 
