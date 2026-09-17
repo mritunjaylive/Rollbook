@@ -49,6 +49,11 @@ export const Route = createRootRoute({
       { rel: "manifest", href: "/manifest.json" },
       { rel: "apple-touch-icon", href: "/__grok/rollbook-180.png" },
     ],
+    scripts: [
+      {
+        children: `if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js'); }); }`,
+      },
+    ],
   }),
   component: Root,
 });
