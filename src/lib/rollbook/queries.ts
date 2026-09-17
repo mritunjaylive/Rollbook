@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import * as api from "./api";
 import type {
+  ActivityKind,
   AttendanceStatus,
   CreditType,
   Snapshot,
@@ -27,6 +28,7 @@ export function selectActive(snapshot: Snapshot | undefined) {
       periods: [],
       attendance: [],
       credits: [],
+      activities: [],
     };
   }
   const semester =
@@ -45,6 +47,7 @@ export function selectActive(snapshot: Snapshot | undefined) {
     periods,
     attendance: snapshot.attendance.filter((a) => periodIds.has(a.periodId)),
     credits: snapshot.credits.filter((c) => subjectIds.has(c.subjectId)),
+    activities: snapshot.activities,
   };
 }
 
@@ -171,6 +174,25 @@ export function useRollbookMutations() {
     onSuccess: () => invalidate(),
   });
 
+  const upsertActivity = useMutation({
+    mutationFn: (data: {
+      id?: string;
+      kind: ActivityKind;
+      name: string;
+      activityDate: string;
+      startTime: string;
+      endTime: string;
+      description: string;
+      credits: number | null;
+    }) => api.upsertActivity({ data }),
+    onSuccess: () => invalidate(),
+  });
+
+  const deleteActivity = useMutation({
+    mutationFn: (id: string) => api.deleteActivity({ data: { id } }),
+    onSuccess: () => invalidate(),
+  });
+
   const importSnapshot = useMutation({
     mutationFn: (data: Snapshot & { version: 1 }) =>
       api.importSnapshot({ data }),
@@ -198,6 +220,8 @@ export function useRollbookMutations() {
     clearAttendance,
     addCreditGrant,
     deleteCreditGrant,
+    upsertActivity,
+    deleteActivity,
     importSnapshot,
     archiveRoutine,
   };

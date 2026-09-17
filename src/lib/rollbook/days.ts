@@ -19,3 +19,11 @@ export const CREDIT_TYPES = [
   { id: "project", label: "Project" },
   { id: "other", label: "Other" },
 ] as const;
+
+export const ACTIVITY_KINDS = [
+  { id: "workshop", label: "Workshop" },
+  { id: "activity", label: "Activity" },
+  { id: "fest", label: "Fest" },
+  { id: "game", label: "Game" },
+  { id: "other", label: "Other" },
+] as const;

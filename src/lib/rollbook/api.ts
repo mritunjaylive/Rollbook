@@ -4,6 +4,8 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { newId } from "@/lib/utils";
 import type {
+  Activity,
+  ActivityKind,
   AttendanceEntry,
   AttendanceStatus,
   CreditGrant,
@@ -17,6 +19,7 @@ import type {
 
 const statusSchema = z.enum(["present", "absent", "holiday", "cancelled"]);
 const creditTypeSchema = z.enum(["notes", "assignment", "project", "other"]);
+const activityKindSchema = z.enum(["workshop", "activity", "fest", "game", "other"]);
 
 type ProfileRow = {
   student_name: string;
@@ -66,6 +69,16 @@ type CreditRow = {
   teacher_name: string;
   granted_on: string;
   note: string | null;
+};
+type ActivityRow = {
+  id: string;
+  kind: ActivityKind;
+  name: string;
+  activity_date: string;
+  start_time: string;
+  end_time: string;
+  description: string;
+  credits: number | null;
 };
 
 function mapProfile(r: ProfileRow): Profile {
@@ -129,6 +142,18 @@ function mapCredit(r: CreditRow): CreditGrant {
     note: r.note,
   };
 }
+function mapActivity(r: ActivityRow): Activity {
+  return {
+    id: r.id,
+    kind: r.kind,
+    name: r.name,
+    activityDate: r.activity_date,
+    startTime: r.start_time,
+    endTime: r.end_time,
+    description: r.description,
+    credits: r.credits == null ? null : Number(r.credits),
+  };
+}
 
 function isUniqueViolation(err: unknown) {
   const msg = err instanceof Error ? err.message : String(err);
@@ -140,7 +165,7 @@ export const getSnapshot = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<Snapshot> => {
     const sql = await getSql();
     const uid = context.userId;
-    const [profiles, semesters, subjects, periods, attendance, credits] =
+    const [profiles, semesters, subjects, periods, attendance, credits, activities] =
       await Promise.all([
         sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, (avatar_data is not null) as has_avatar from profiles where user_id = ${uid}`,
         sql<SemesterRow>`select id, course_name, semester_name, start_date, is_active, classes_over from semesters where user_id = ${uid} order by created_at desc`,
@@ -148,6 +173,7 @@ export const getSnapshot = createServerFn({ method: "GET" })
         sql<PeriodRow>`select id, semester_id, subject_id, day_of_week, period_number, start_time, end_time, teacher_name from periods where user_id = ${uid} order by day_of_week, period_number`,
         sql<AttendanceRow>`select id, period_id, date, status from attendance where user_id = ${uid}`,
         sql<CreditRow>`select id, subject_id, amount, type, teacher_name, granted_on, note from credit_grants where user_id = ${uid} order by granted_on desc`,
+        sql<ActivityRow>`select id, kind, name, activity_date, start_time, end_time, description, credits from activities where user_id = ${uid} order by activity_date desc, start_time desc`,
       ]);
     return {
       profile: profiles[0] ? mapProfile(profiles[0]) : null,
@@ -156,6 +182,7 @@ export const getSnapshot = createServerFn({ method: "GET" })
       periods: periods.map(mapPeriod),
       attendance: attendance.map(mapAttendance),
       credits: credits.map(mapCredit),
+      activities: activities.map(mapActivity),
     };
   });
 
@@ -532,6 +559,54 @@ export const deleteCreditGrant = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+const activityInput = z.object({
+  id: z.string().optional(),
+  kind: activityKindSchema,
+  name: z.string().trim().min(1).max(160),
+  activityDate: z.string().min(1),
+  startTime: z.string().min(1).max(8),
+  endTime: z.string().min(1).max(8),
+  description: z.string().trim().max(2000),
+  credits: z.number().int().min(0).max(999).nullable(),
+});
+
+export const upsertActivity = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: unknown) => activityInput.parse(d))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const uid = context.userId;
+    const id = data.id ?? newId();
+    if (data.id) {
+      await sql`
+        update activities
+        set kind = ${data.kind},
+            name = ${data.name},
+            activity_date = ${data.activityDate},
+            start_time = ${data.startTime},
+            end_time = ${data.endTime},
+            description = ${data.description},
+            credits = ${data.credits}
+        where id = ${id} and user_id = ${uid}
+      `;
+    } else {
+      await sql`
+        insert into activities (id, user_id, kind, name, activity_date, start_time, end_time, description, credits)
+        values (${id}, ${uid}, ${data.kind}, ${data.name}, ${data.activityDate}, ${data.startTime}, ${data.endTime}, ${data.description}, ${data.credits})
+      `;
+    }
+    return { id };
+  });
+
+export const deleteActivity = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: unknown) => z.object({ id: z.string() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await sql`delete from activities where id = ${data.id} and user_id = ${context.userId}`;
+    return { ok: true as const };
+  });
+
 // ── Avatar ────────────────────────────────────────────────────────────────────
 // avatar_data is stored in the profiles table (0004_avatar.sql) but NEVER
 // fetched by getSnapshot — it is only read via GET /api/avatar, which sets
@@ -646,6 +721,20 @@ const importSchema = z.object({
       note: z.string().nullable(),
     }),
   ),
+  activities: z
+    .array(
+      z.object({
+        id: z.string(),
+        kind: activityKindSchema,
+        name: z.string(),
+        activityDate: z.string(),
+        startTime: z.string(),
+        endTime: z.string(),
+        description: z.string(),
+        credits: z.number().nullable(),
+      }),
+    )
+    .default([]),
 });
 
 export const importSnapshot = createServerFn({ method: "POST" })
@@ -654,6 +743,7 @@ export const importSnapshot = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const uid = context.userId;
+    await sql`delete from activities where user_id = ${uid}`;
     await sql`delete from credit_grants where user_id = ${uid}`;
     await sql`delete from attendance where user_id = ${uid}`;
     await sql`delete from periods where user_id = ${uid}`;
@@ -696,6 +786,12 @@ export const importSnapshot = createServerFn({ method: "POST" })
       await sql`
         insert into credit_grants (id, user_id, subject_id, amount, type, teacher_name, granted_on, note)
         values (${c.id}, ${uid}, ${c.subjectId}, ${c.amount}, ${c.type}, ${c.teacherName}, ${c.grantedOn}, ${c.note})
+      `;
+    }
+    for (const a of data.activities) {
+      await sql`
+        insert into activities (id, user_id, kind, name, activity_date, start_time, end_time, description, credits)
+        values (${a.id}, ${uid}, ${a.kind}, ${a.name}, ${a.activityDate}, ${a.startTime}, ${a.endTime}, ${a.description}, ${a.credits})
       `;
     }
     return { ok: true as const };

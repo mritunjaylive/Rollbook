@@ -55,6 +55,19 @@ export type CreditGrant = {
   note: string | null;
 };
 
+export type ActivityKind = "workshop" | "activity" | "fest" | "game" | "other";
+
+export type Activity = {
+  id: string;
+  kind: ActivityKind;
+  name: string;
+  activityDate: string;
+  startTime: string;
+  endTime: string;
+  description: string;
+  credits: number | null;
+};
+
 export type Snapshot = {
   profile: Profile | null;
   semesters: Semester[];
@@ -62,6 +75,7 @@ export type Snapshot = {
   periods: Period[];
   attendance: AttendanceEntry[];
   credits: CreditGrant[];
+  activities: Activity[];
 };
 
 export type AttendanceStats = {

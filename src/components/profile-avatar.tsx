@@ -10,6 +10,7 @@
  */
 import { Camera, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { fileToDataUrl } from "@/lib/use-profile-avatar";
 
@@ -44,6 +45,15 @@ export function ProfileAvatar({
     setImgFailed(false);
   }, [src]);
 
+  async function handleFile(file: File) {
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      onAvatarChange?.(dataUrl);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not read that image.");
+    }
+  }
+
   return (
     <div
       className={cn("relative shrink-0 select-none", className)}
@@ -77,7 +87,7 @@ export function ProfileAvatar({
             className="group absolute inset-0 flex items-center justify-center rounded-full bg-ink/0 transition-colors hover:bg-ink/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <Camera
-              className="size-5 text-white opacity-0 drop-shadow transition-opacity group-hover:opacity-100"
+              className="size-5 text-accent-fg drop-shadow transition-opacity group-hover:opacity-100 sm:opacity-0"
               aria-hidden
             />
           </button>

@@ -1,14 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Github, Mail, Twitter } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Github, Mail, Pencil, Twitter } from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
+import { ParticipationList } from "@/components/participation-list";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input } from "@/components/ui/input";
-import { UserButton } from "@/lib/auth/gates";
+import { authEnabled, signOut } from "@/lib/auth/client";
+import { hasGateSessionMarker } from "@/lib/auth/gate-session-marker";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import {
   getAvatarUrl,
@@ -23,6 +25,9 @@ export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
 const APP_VERSION = "1.1.0";
 
+const subscribeToNothing = () => () => {};
+const noGateSessionOnServer = () => false;
+
 function SettingsPage() {
   const user = useCurrentUser();
   const snap = useSnapshot();
@@ -31,9 +36,9 @@ function SettingsPage() {
   const mut = useRollbookMutations();
   const fileRef = useRef<HTMLInputElement>(null);
   const [semOpen, setSemOpen] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
   const profile = snapshot?.profile;
 
-  // ── Avatar state ──────────────────────────────────────────────────────────
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   useEffect(() => {
     setAvatarUrl(user?.id ? getAvatarUrl(user.id) : null);
@@ -51,14 +56,12 @@ function SettingsPage() {
         setAvatarUrl(null);
         toast.success("Profile picture removed.");
       }
-      // Notify header + home page
       window.dispatchEvent(new Event("rollbook:avatar-updated"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save picture.");
     }
   }
 
-  // ── Backup helpers ────────────────────────────────────────────────────────
   function exportJson() {
     if (!snapshot) return;
     const blob = new Blob(
@@ -72,6 +75,7 @@ function SettingsPage() {
             periods: snapshot.periods,
             attendance: snapshot.attendance,
             credits: snapshot.credits,
+            activities: snapshot.activities,
           },
           null,
           2,
@@ -99,35 +103,48 @@ function SettingsPage() {
     }
   }
 
+  const accountName = profile?.studentName || user?.displayName || user?.primaryEmail || "Account";
+
   return (
     <AppShell>
       <h1 className="font-display text-3xl font-semibold">More</h1>
 
-      {/* ── Account ── */}
       <Card className="mt-5">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-faint">
           Account
         </p>
-        <p className="mt-1 text-sm text-ink-soft">
-          {user?.primaryEmail ?? user?.displayName}
-        </p>
-        <div className="mt-3">
-          <UserButton />
+        <div className="mt-3 flex items-start gap-3">
+          <ProfileAvatar
+            src={avatarUrl}
+            name={accountName}
+            size={56}
+            editable={editingProfile}
+            onAvatarChange={handleAvatarChange}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium text-ink">{accountName}</p>
+            {user?.primaryEmail && user.primaryEmail !== accountName ? (
+              <p className="truncate text-sm text-ink-soft">{user.primaryEmail}</p>
+            ) : null}
+            {editingProfile ? (
+              <p className="mt-1 text-xs text-ink-faint">Tap the photo to change · max 50 KB</p>
+            ) : null}
+            <SignOutButton />
+          </div>
         </div>
       </Card>
 
-      {/* ── Profile (with avatar) ── */}
       {profile ? (
-        <ProfileForm
+        <ProfileCard
           key={profile.studentId}
           profile={profile}
-          userId={user?.id ?? ""}
-          avatarUrl={avatarUrl}
-          onAvatarChange={handleAvatarChange}
+          editing={editingProfile}
+          onEditingChange={setEditingProfile}
         />
       ) : null}
 
-      {/* ── Semesters ── */}
+      <ParticipationList activities={snapshot?.activities ?? []} />
+
       <section className="mt-8">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-display text-xl font-semibold">Semesters</h2>
@@ -188,7 +205,6 @@ function SettingsPage() {
         ) : null}
       </section>
 
-      {/* ── Backup ── */}
       <section className="mt-8 space-y-3">
         <h2 className="font-display text-xl font-semibold">Backup</h2>
         <p className="text-sm text-ink-soft">
@@ -215,11 +231,9 @@ function SettingsPage() {
         </div>
       </section>
 
-      {/* ── About ── */}
       <section className="mt-8">
         <h2 className="font-display text-xl font-semibold">About</h2>
         <Card className="mt-3 space-y-4">
-          {/* App identity */}
           <div className="flex items-center gap-3">
             <img
               src="/favicon.svg"
@@ -237,7 +251,6 @@ function SettingsPage() {
 
           <hr className="border-line" />
 
-          {/* Developer */}
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink-faint">
               Developer
@@ -269,7 +282,6 @@ function SettingsPage() {
 
           <hr className="border-line" />
 
-          {/* Legal / misc */}
           <p className="text-xs text-ink-faint">
             Built with TanStack Start, React 19, Better Auth, and Neon PostgreSQL.
             Your data is private and scoped to your account only.
@@ -282,18 +294,38 @@ function SettingsPage() {
   );
 }
 
-// ── Profile form (with editable avatar) ──────────────────────────────────────
+function SignOutButton() {
+  const [signingOut, setSigningOut] = useState(false);
+  const gateSession = useSyncExternalStore(
+    subscribeToNothing,
+    hasGateSessionMarker,
+    noGateSessionOnServer,
+  );
+  if (!authEnabled || gateSession) return null;
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      className="mt-3"
+      disabled={signingOut}
+      onClick={() => {
+        setSigningOut(true);
+        void signOut().catch(() => setSigningOut(false));
+      }}
+    >
+      {signingOut ? "Signing out…" : "Sign out"}
+    </Button>
+  );
+}
 
-function ProfileForm({
+function ProfileCard({
   profile,
-  userId,
-  avatarUrl,
-  onAvatarChange,
+  editing,
+  onEditingChange,
 }: {
   profile: Profile;
-  userId: string;
-  avatarUrl: string | null;
-  onAvatarChange: (dataUrl: string | null) => void;
+  editing: boolean;
+  onEditingChange: (v: boolean) => void;
 }) {
   const mut = useRollbookMutations();
   const [studentName, setStudentName] = useState(profile.studentName);
@@ -301,72 +333,101 @@ function ProfileForm({
   const [collegeName, setCollegeName] = useState(profile.collegeName);
   const [threshold, setThreshold] = useState(profile.thresholdPercent);
 
-  return (
-    <form
-      className="mt-6 space-y-3"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        try {
-          await mut.upsertProfile.mutateAsync({
-            studentName,
-            studentId,
-            collegeName,
-            thresholdPercent: threshold,
-          });
-          toast.success("Profile saved.");
-        } catch (err) {
-          toast.error(err instanceof Error ? err.message : "Could not save.");
-        }
-      }}
-    >
-      <h2 className="font-display text-xl font-semibold">Profile</h2>
+  function cancelEdit() {
+    setStudentName(profile.studentName);
+    setStudentId(profile.studentId);
+    setCollegeName(profile.collegeName);
+    setThreshold(profile.thresholdPercent);
+    onEditingChange(false);
+  }
 
-      {/* Avatar + name side-by-side */}
-      <div className="flex items-center gap-4">
-        <ProfileAvatar
-          src={avatarUrl}
-          name={studentName || profile.studentName}
-          size={72}
-          editable
-          onAvatarChange={onAvatarChange}
-        />
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-medium text-ink">
-            {studentName || profile.studentName}
-          </p>
-          <p className="text-xs text-ink-faint">{studentId || profile.studentId}</p>
-          <p className="mt-1 text-xs text-ink-faint">
-            Tap the photo to upload · max 50 KB
-          </p>
-        </div>
+  return (
+    <Card className="mt-6">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-faint">
+          Profile
+        </p>
+        {editing ? (
+          <Button size="sm" variant="ghost" type="button" onClick={cancelEdit}>
+            Cancel
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="secondary"
+            type="button"
+            onClick={() => onEditingChange(true)}
+          >
+            <Pencil className="size-4" aria-hidden />
+            Edit
+          </Button>
+        )}
       </div>
 
-      <Field label="Student name">
-        <Input value={studentName} onChange={(e) => setStudentName(e.target.value)} required />
-      </Field>
-      <Field label="Student ID">
-        <Input value={studentId} onChange={(e) => setStudentId(e.target.value)} required />
-      </Field>
-      <Field label="College">
-        <Input value={collegeName} onChange={(e) => setCollegeName(e.target.value)} required />
-      </Field>
-      <Field label="Attendance threshold (%)">
-        <Input
-          type="number"
-          min={50}
-          max={100}
-          value={threshold}
-          onChange={(e) => setThreshold(Number(e.target.value) || 75)}
-        />
-      </Field>
-      <Button type="submit" disabled={mut.upsertProfile.isPending}>
-        {mut.upsertProfile.isPending ? "Saving…" : "Save profile"}
-      </Button>
-    </form>
+      {editing ? (
+        <form
+          className="mt-4 space-y-3"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            try {
+              await mut.upsertProfile.mutateAsync({
+                studentName,
+                studentId,
+                collegeName,
+                thresholdPercent: threshold,
+              });
+              toast.success("Profile saved.");
+              onEditingChange(false);
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Could not save.");
+            }
+          }}
+        >
+          <Field label="Student name">
+            <Input value={studentName} onChange={(e) => setStudentName(e.target.value)} required />
+          </Field>
+          <Field label="College">
+            <Input value={collegeName} onChange={(e) => setCollegeName(e.target.value)} required />
+          </Field>
+          <Field label="Student ID">
+            <Input value={studentId} onChange={(e) => setStudentId(e.target.value)} required />
+          </Field>
+          <Field label="Attendance threshold (%)">
+            <Input
+              type="number"
+              min={50}
+              max={100}
+              value={threshold}
+              onChange={(e) => setThreshold(Number(e.target.value) || 75)}
+            />
+          </Field>
+          <Button type="submit" disabled={mut.upsertProfile.isPending}>
+            {mut.upsertProfile.isPending ? "Saving…" : "Save profile"}
+          </Button>
+        </form>
+      ) : (
+        <dl className="mt-4 grid gap-3">
+          <ReadRow label="Student name" value={profile.studentName} />
+          <ReadRow label="College" value={profile.collegeName} />
+          <ReadRow label="Student ID" value={profile.studentId} />
+          <ReadRow
+            label="Attendance threshold"
+            value={`${profile.thresholdPercent}%`}
+          />
+        </dl>
+      )}
+    </Card>
   );
 }
 
-// ── New semester dialog ───────────────────────────────────────────────────────
+function ReadRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs font-medium text-ink-faint">{label}</dt>
+      <dd className="mt-0.5 text-sm text-ink">{value}</dd>
+    </div>
+  );
+}
 
 function NewSemesterDialog({
   open,
