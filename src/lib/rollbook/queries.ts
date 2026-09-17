@@ -17,7 +17,10 @@ export function useSnapshot() {
     queryKey: SNAPSHOT_KEY,
     queryFn: () => api.getSnapshot(),
     enabled: !isPending && Boolean(user),
-    staleTime: 10_000,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 }
 
@@ -59,6 +62,7 @@ export function useInvalidateSnapshot() {
 
 export function useRollbookMutations() {
   const invalidate = useInvalidateSnapshot();
+  const qc = useQueryClient();
 
   const upsertProfile = useMutation({
     mutationFn: (data: {
@@ -160,7 +164,38 @@ export function useRollbookMutations() {
       }
       return api.markAttendance({ data });
     },
-    onSuccess: () => invalidate(),
+    onMutate: async (newData) => {
+      await qc.cancelQueries({ queryKey: SNAPSHOT_KEY });
+      const previousSnapshot = qc.getQueryData<Snapshot>(SNAPSHOT_KEY);
+      if (previousSnapshot) {
+        qc.setQueryData<Snapshot>(SNAPSHOT_KEY, (old) => {
+          if (!old) return old;
+          const newAttendance = [...old.attendance];
+          const existingIndex = newAttendance.findIndex(
+            (a) => a.periodId === newData.periodId && a.date === newData.date
+          );
+          const newEntry = {
+            id: existingIndex >= 0 ? newAttendance[existingIndex].id : "temp-" + Date.now(),
+            periodId: newData.periodId,
+            date: newData.date,
+            status: newData.status,
+          };
+          if (existingIndex >= 0) {
+            newAttendance[existingIndex] = newEntry;
+          } else {
+            newAttendance.push(newEntry);
+          }
+          return { ...old, attendance: newAttendance };
+        });
+      }
+      return { previousSnapshot };
+    },
+    onError: (_err, _newData, context) => {
+      if (context?.previousSnapshot) {
+        qc.setQueryData(SNAPSHOT_KEY, context.previousSnapshot);
+      }
+    },
+    onSettled: () => invalidate(),
   });
 
   const markDayStatus = useMutation({
@@ -189,13 +224,67 @@ export function useRollbookMutations() {
       }
       return api.markDayStatus({ data });
     },
-    onSuccess: () => invalidate(),
+    onMutate: async (newData) => {
+      await qc.cancelQueries({ queryKey: SNAPSHOT_KEY });
+      const previousSnapshot = qc.getQueryData<Snapshot>(SNAPSHOT_KEY);
+      if (previousSnapshot) {
+        qc.setQueryData<Snapshot>(SNAPSHOT_KEY, (old) => {
+          if (!old) return old;
+          const newAttendance = [...old.attendance];
+          for (const periodId of newData.periodIds) {
+            const existingIndex = newAttendance.findIndex(
+              (a) => a.periodId === periodId && a.date === newData.date
+            );
+            const newEntry = {
+              id: existingIndex >= 0 ? newAttendance[existingIndex].id : "temp-" + Date.now() + "-" + periodId,
+              periodId,
+              date: newData.date,
+              status: newData.status,
+            };
+            if (existingIndex >= 0) {
+              newAttendance[existingIndex] = newEntry;
+            } else {
+              newAttendance.push(newEntry);
+            }
+          }
+          return { ...old, attendance: newAttendance };
+        });
+      }
+      return { previousSnapshot };
+    },
+    onError: (_err, _newData, context) => {
+      if (context?.previousSnapshot) {
+        qc.setQueryData(SNAPSHOT_KEY, context.previousSnapshot);
+      }
+    },
+    onSettled: () => invalidate(),
   });
 
   const clearAttendance = useMutation({
     mutationFn: (data: { periodId: string; date: string }) =>
       api.clearAttendance({ data }),
-    onSuccess: () => invalidate(),
+    onMutate: async (newData) => {
+      await qc.cancelQueries({ queryKey: SNAPSHOT_KEY });
+      const previousSnapshot = qc.getQueryData<Snapshot>(SNAPSHOT_KEY);
+      if (previousSnapshot) {
+        qc.setQueryData<Snapshot>(SNAPSHOT_KEY, (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            attendance: old.attendance.filter(
+              (a) => !(a.periodId === newData.periodId && a.date === newData.date)
+            ),
+          };
+        });
+      }
+      return { previousSnapshot };
+    },
+    onError: (_err, _newData, context) => {
+      if (context?.previousSnapshot) {
+        qc.setQueryData(SNAPSHOT_KEY, context.previousSnapshot);
+      }
+    },
+    onSettled: () => invalidate(),
   });
 
   const addCreditGrant = useMutation({
@@ -261,6 +350,10 @@ export function useRollbookMutations() {
     onSuccess: () => invalidate(),
   });
 
+  const getFullBackup = useMutation({
+    mutationFn: () => api.getFullBackup(),
+  });
+
   return {
     upsertProfile,
     upsertSemester,
@@ -282,5 +375,6 @@ export function useRollbookMutations() {
     archiveRoutine,
     upsertHoliday,
     deleteHoliday,
+    getFullBackup,
   };
 }

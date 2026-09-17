@@ -24,22 +24,37 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+
+  // Bypass non-GET requests and API routes so they go straight to network
+  if (event.request.method !== "GET" || url.pathname.startsWith("/api/")) {
+    return;
+  }
+
   if (event.request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match(OFFLINE_URL)),
+      fetch(event.request).catch(() => caches.match(OFFLINE_URL))
     );
     return;
   }
 
+  // Stale-While-Revalidate strategy for static assets
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
+      const fetchPromise = fetch(event.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === "basic") {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
         return networkResponse;
+      }).catch(() => {
+        // Ignore network errors for stale-while-revalidate when offline
       });
-    }),
+
+      return cachedResponse || fetchPromise;
+    })
   );
 });
 

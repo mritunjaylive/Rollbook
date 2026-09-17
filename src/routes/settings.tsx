@@ -79,33 +79,37 @@ function SettingsPage() {
     }
   }
 
-  function exportJson() {
-    if (!snapshot) return;
-    const blob = new Blob(
-      [
-        JSON.stringify(
-          {
-            version: 1 as const,
-            profile: snapshot.profile,
-            semesters: snapshot.semesters,
-            subjects: snapshot.subjects,
-            periods: snapshot.periods,
-            attendance: snapshot.attendance,
-            credits: snapshot.credits,
-            activities: snapshot.activities,
-          },
-          null,
-          2,
-        ),
-      ],
-      { type: "application/json" },
-    );
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `rollbook-backup-${localISODate()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  async function exportJson() {
+    try {
+      const fullSnapshot = await mut.getFullBackup.mutateAsync();
+      const blob = new Blob(
+        [
+          JSON.stringify(
+            {
+              version: 1 as const,
+              profile: fullSnapshot.profile,
+              semesters: fullSnapshot.semesters,
+              subjects: fullSnapshot.subjects,
+              periods: fullSnapshot.periods,
+              attendance: fullSnapshot.attendance,
+              credits: fullSnapshot.credits,
+              activities: fullSnapshot.activities,
+            },
+            null,
+            2,
+          ),
+        ],
+        { type: "application/json" },
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `rollbook-backup-${localISODate()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not export backup.");
+    }
   }
 
   async function onImport(file: File) {
@@ -326,7 +330,7 @@ function SettingsPage() {
           Your roll already syncs with this email. Export is an extra copy on your device.
         </p>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={exportJson}>
+          <Button variant="secondary" onClick={() => void exportJson()}>
             Export JSON
           </Button>
           <Button variant="outline" onClick={() => fileRef.current?.click()}>

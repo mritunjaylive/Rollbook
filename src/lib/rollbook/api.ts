@@ -179,6 +179,46 @@ export const getSnapshot = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<Snapshot> => {
     const sql = await getSql();
     const uid = context.userId;
+
+    const semesters = await sql<SemesterRow>`select id, course_name, semester_name, start_date, is_active, classes_over from semesters where user_id = ${uid} order by created_at desc`;
+    const activeSem = semesters.find((s) => s.is_active) ?? semesters[0];
+    const activeSemId = activeSem?.id;
+
+    const [profiles, subjects, periods, attendance, credits, activities, holidays] =
+      await Promise.all([
+        sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, (avatar_data is not null) as has_avatar from profiles where user_id = ${uid}`,
+        activeSemId
+          ? sql<SubjectRow>`select id, semester_id, name, code, default_teacher, description, closed from subjects where user_id = ${uid} and semester_id = ${activeSemId} order by created_at`
+          : Promise.resolve([]),
+        activeSemId
+          ? sql<PeriodRow>`select id, semester_id, subject_id, day_of_week, period_number, start_time, end_time, teacher_name from periods where user_id = ${uid} and semester_id = ${activeSemId} order by day_of_week, period_number`
+          : Promise.resolve([]),
+        activeSemId
+          ? sql<AttendanceRow>`select a.id, a.period_id, a.date, a.status from attendance a join periods p on a.period_id = p.id where a.user_id = ${uid} and p.semester_id = ${activeSemId}`
+          : Promise.resolve([]),
+        activeSemId
+          ? sql<CreditRow>`select c.id, c.subject_id, c.amount, c.type, c.teacher_name, c.granted_on, c.note from credit_grants c join subjects s on c.subject_id = s.id where c.user_id = ${uid} and s.semester_id = ${activeSemId} order by c.granted_on desc`
+          : Promise.resolve([]),
+        sql<ActivityRow>`select id, kind, name, activity_date, start_time, end_time, description, credits from activities where user_id = ${uid} order by activity_date desc, start_time desc`,
+        sql<HolidayRow>`select id, name, start_date, end_date from holidays where user_id = ${uid} order by start_date desc`,
+      ]);
+    return {
+      profile: profiles[0] ? mapProfile(profiles[0]) : null,
+      semesters: semesters.map(mapSemester),
+      subjects: subjects.map(mapSubject),
+      periods: periods.map(mapPeriod),
+      attendance: attendance.map(mapAttendance),
+      credits: credits.map(mapCredit),
+      activities: activities.map(mapActivity),
+      holidays: holidays.map(mapHoliday),
+    };
+  });
+
+export const getFullBackup = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<Snapshot> => {
+    const sql = await getSql();
+    const uid = context.userId;
     const [profiles, semesters, subjects, periods, attendance, credits, activities, holidays] =
       await Promise.all([
         sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, (avatar_data is not null) as has_avatar from profiles where user_id = ${uid}`,

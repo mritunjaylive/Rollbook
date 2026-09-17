@@ -38,7 +38,7 @@ import { Pool } from "pg";
 import { ensureDbReady, getPglite } from "../db";
 import { emailAndPasswordEnabled } from "./email-password";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
-import { buildPasswordResetEmail, buildWelcomeEmail, sendEmail } from "./mailer.server";
+import { buildPasswordResetEmail, buildWelcomeEmail, buildVerificationEmail, sendEmail } from "./mailer.server";
 import { GROK_PROVIDERS } from "./providers";
 import { pgliteDialect } from "./pglite-dialect";
 import {
@@ -221,6 +221,16 @@ export const auth = betterAuth({
     ? {
         emailAndPassword: {
           enabled: true,
+          requireEmailVerification: true,
+          sendVerificationEmail: async ({ user, url }) => {
+            await sendEmail({
+              to: user.email,
+              subject: "Verify your email for Rollbook",
+              html: buildVerificationEmail({
+                verificationUrl: url,
+              }),
+            });
+          },
           sendResetPassword: async ({ user, url }) => {
             await sendEmail({
               to: user.email,

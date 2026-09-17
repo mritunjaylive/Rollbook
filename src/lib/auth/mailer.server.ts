@@ -164,3 +164,53 @@ export function buildWelcomeEmail(opts: {
 </body>
 </html>`;
 }
+
+/**
+ * Build the HTML body for an email verification email.
+ */
+export function buildVerificationEmail(opts: {
+  verificationUrl: string;
+  appName?: string;
+}): string {
+  const { verificationUrl, appName = "Rollbook" } = opts;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Verify your email for ${appName}</title>
+</head>
+<body style="margin:0;padding:0;background:#f5f4f0;font-family:system-ui,-apple-system,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width:480px;background:#ffffff;border-radius:12px;padding:40px 32px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+          <tr>
+            <td>
+              <p style="margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#d97706;">
+                College attendance
+              </p>
+              <h1 style="margin:0 0 24px;font-size:28px;font-weight:700;color:#1c1814;letter-spacing:-0.02em;">
+                Verify your email
+              </h1>
+              <p style="margin:0 0 24px;font-size:15px;color:#6b6460;line-height:1.5;">
+                Thanks for signing up for ${appName}! Please verify your email address by clicking the button below.
+              </p>
+              <a href="${verificationUrl}"
+                style="display:inline-block;padding:12px 28px;background:#d97706;color:#ffffff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;letter-spacing:-0.01em;">
+                Verify email address
+              </a>
+              <hr style="margin:24px 0;border:none;border-top:1px solid #e8e6e0;" />
+              <p style="margin:0;font-size:12px;color:#b8b4b0;">
+                Having trouble with the button? Copy and paste this link into your browser:<br />
+                <a href="${verificationUrl}" style="color:#d97706;word-break:break-all;">${verificationUrl}</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
