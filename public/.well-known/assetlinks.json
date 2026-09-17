@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.mritunjaylive.rollbook",
+        "sha256_cert_fingerprints": ["6C:21:FB:50:02:E7:17:36:C6:FC:0F:52:38:4B:5E:98:EB:99:B4:7B:6D:2C:BC:71:B9:78:B9:64:60:79:C9:89"]
+      }
+    }]
