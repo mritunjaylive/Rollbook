@@ -20,11 +20,18 @@ function ForgotPassword() {
     setBusy(true);
     try {
       const { error: err } = await authClient.forgetPassword({
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         redirectTo: typeof window !== "undefined" ? window.location.origin + "/reset-password" : "/reset-password",
       });
       // If the user doesn't exist, Better Auth might return a 404 or an error.
       // We should still show the success screen to prevent email enumeration.
+      if (err) {
+        console.error("============= FORGET PASSWORD ERROR =============");
+        console.error("Status:", err.status);
+        console.error("Code:", err.code);
+        console.error("Message:", err.message);
+        console.error("Full error object:", JSON.stringify(err, null, 2));
+      }
       if (err && err.status !== 404 && !err.message?.toLowerCase().includes("not found")) {
         throw new Error(err.message || "Could not send reset email.");
       }

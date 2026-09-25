@@ -223,6 +223,9 @@ export const auth = betterAuth({
           enabled: true,
           requireEmailVerification: true,
           sendResetPassword: async ({ user, url }) => {
+            console.log("============= SEND RESET PASSWORD TRIGGERED =============");
+            console.log("User:", user.email);
+            console.log("URL:", url);
             await sendEmail({
               to: user.email,
               subject: "Reset your Rollbook password",
