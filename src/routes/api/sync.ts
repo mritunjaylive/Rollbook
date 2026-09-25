@@ -1,19 +1,21 @@
-import { createAPIFileRoute } from "@tanstack/react-start";
-import { getSession } from "@/lib/auth/server";
+import { createFileRoute } from "@tanstack/react-router";
+import { auth } from "@/lib/auth/server";
 import { getSql } from "@/lib/db";
 import { newId } from "@/lib/utils";
 
-export const Route = createAPIFileRoute("/api/sync")({
-  POST: async ({ request }) => {
-    const session = await getSession(request);
-    if (!session?.user) {
-      return new Response("Unauthorized", { status: 401 });
-    }
+export const Route = createFileRoute("/api/sync")({
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        const session = await auth.api.getSession({ headers: request.headers });
+        if (!session?.user) {
+          return new Response("Unauthorized", { status: 401 });
+        }
 
-    try {
-      const body = await request.json();
-      const sql = await getSql();
-      const uid = session.user.id;
+        try {
+          const body = await request.json();
+          const sql = await getSql();
+          const uid = session.user.id;
       
       if (body.action === "markAttendance") {
         const { periodId, date, status } = body.data;
@@ -48,6 +50,8 @@ export const Route = createAPIFileRoute("/api/sync")({
     } catch (e) {
       console.error("Sync API error:", e);
       return new Response("Internal Error", { status: 500 });
+    }
+      }
     }
   },
 });
