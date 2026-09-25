@@ -39,7 +39,7 @@ function Login() {
           email: email.trim(),
           password,
           name: name.trim() || email.trim(),
-          callbackURL: "/",
+          callbackURL: typeof window !== "undefined" ? window.location.origin : "/",
         });
         if (err) throw new Error(err.message || "Could not create account.");
         setAwaitingVerification(true);
@@ -72,7 +72,7 @@ function Login() {
     try {
       const { error: err } = await authClient.sendVerificationEmail({
         email: email.trim(),
-        callbackURL: "/",
+        callbackURL: typeof window !== "undefined" ? window.location.origin : "/",
       });
       if (err) throw new Error(err.message || "Could not resend email.");
       alert("Verification email resent!");
@@ -85,10 +85,6 @@ function Login() {
 
   return (
     <main className="relative min-h-dvh bg-paper">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-[repeating-linear-gradient(transparent,transparent_27px,rgba(28,24,20,0.05)_28px)]"
-      />
       <div className="relative mx-auto flex min-h-dvh max-w-md flex-col justify-center px-5 py-12">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-accent">
           College attendance

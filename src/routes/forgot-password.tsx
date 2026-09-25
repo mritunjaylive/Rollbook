@@ -21,9 +21,13 @@ function ForgotPassword() {
     try {
       const { error: err } = await authClient.forgetPassword({
         email: email.trim(),
-        redirectTo: "/reset-password",
+        redirectTo: typeof window !== "undefined" ? window.location.origin + "/reset-password" : "/reset-password",
       });
-      if (err) throw new Error(err.message || "Could not send reset email.");
+      // If the user doesn't exist, Better Auth might return a 404 or an error.
+      // We should still show the success screen to prevent email enumeration.
+      if (err && err.status !== 404 && !err.message?.toLowerCase().includes("not found")) {
+        throw new Error(err.message || "Could not send reset email.");
+      }
       setSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -34,10 +38,6 @@ function ForgotPassword() {
 
   return (
     <main className="relative min-h-dvh bg-paper">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-[repeating-linear-gradient(transparent,transparent_27px,rgba(28,24,20,0.05)_28px)]"
-      />
       <div className="relative mx-auto flex min-h-dvh max-w-md flex-col justify-center px-5 py-12">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-accent">
           College attendance
