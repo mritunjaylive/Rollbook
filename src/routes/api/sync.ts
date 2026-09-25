@@ -1,4 +1,4 @@
-import { createAPIFileRoute } from "@tanstack/react-start/api";
+import { createAPIFileRoute } from "@tanstack/react-start";
 import { getSession } from "@/lib/auth/server";
 import { getSql } from "@/lib/db";
 import { newId } from "@/lib/utils";
