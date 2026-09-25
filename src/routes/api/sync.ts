@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth/server";
 import { getSql } from "@/lib/db";
 import { newId } from "@/lib/utils";
 
-export const APIRoute = createAPIFileRoute("/api/sync")({
+export const Route = createAPIFileRoute("/api/sync")({
   POST: async ({ request }) => {
     const session = await getSession(request);
     if (!session?.user) {

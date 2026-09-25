@@ -19,8 +19,8 @@ function ForgotPassword() {
     setError(null);
     setBusy(true);
     try {
-      // Try requestPasswordReset first, fallback to forgetPassword
-      const method = authClient.requestPasswordReset || authClient.forgetPassword;
+      // Try newer methods first, fallback to older ones
+      const method = (authClient as any).sendPasswordResetEmail || authClient.requestPasswordReset || authClient.forgetPassword;
       const { error: err } = await method({
         email: email.trim().toLowerCase(),
         redirectTo: typeof window !== "undefined" ? window.location.origin + "/reset-password" : "/reset-password",
