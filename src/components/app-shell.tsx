@@ -38,7 +38,7 @@ export function AppShell({
   const mut = useRollbookMutations();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   
-  const profile = snapshot.data?.profile ?? null;
+  const profile = snapshot?.profile ?? null;
 
   // ALL hooks unconditionally at the top — fixes React Error #310.
   // avatarUrl is the versioned /api/avatar?v=… URL (or null).
@@ -59,10 +59,7 @@ export function AppShell({
   // Early returns after all hooks.
   if (isPending) return <ShellSkeleton />;
   if (!user) return <RedirectToSignIn />;
-  if (snapshot.isLoading) return <ShellSkeleton />;
-
-  
-  if (!profile && pathname !== "/setup") return <Navigate to="/setup" />;
+  if (snap.isLoading) return <ShellSkeleton />;
 
   if (!profile && pathname !== "/setup") return <Navigate to="/setup" />;
 
