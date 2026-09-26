@@ -235,23 +235,7 @@ export const auth = betterAuth({
               }),
             });
           },
-          // @ts-ignore - Handle older/newer versions of Better Auth that expect this structure
-          passwordReset: {
-            // @ts-ignore
-            sendPasswordResetEmail: async ({ user, url }) => {
-              console.log("============= SEND PASSWORD RESET EMAIL (ALT) TRIGGERED =============");
-              console.log("User:", user.email);
-              console.log("URL:", url);
-              await sendEmail({
-                to: user.email,
-                subject: "Reset your Rollbook password",
-                html: buildPasswordResetEmail({
-                  resetUrl: url,
-                  expiresInMinutes: 60,
-                }),
-              });
-            }
-          },
+
         },
         emailVerification: {
           sendOnSignUp: true,
