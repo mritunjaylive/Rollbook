@@ -416,11 +416,11 @@ function SettingsPage() {
               </li>
               <li>
                 <a
-                  href="mailto:mritunjaylive@zohomail.in"
+                  href="mailto:mritunjay@mritunjaylive.in"
                   className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
                 >
                   <Mail className="size-4 shrink-0" />
-                  mritunjaylive@zohomail.in
+                  mritunjay@mritunjaylive.in
                 </a>
               </li>
             </ul>
@@ -432,6 +432,49 @@ function SettingsPage() {
             Built with TanStack Start, React 19, Better Auth, and Neon PostgreSQL.
             Your data is private and scoped to your account only.
           </p>
+        </Card>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="font-display text-xl font-semibold">Contact Us</h2>
+        <Card className="mt-3 space-y-4">
+          <p className="text-sm text-ink-soft">
+            Have questions, feedback, or need help? Send us an email directly or use the form below.
+          </p>
+          <a
+            href="mailto:rollbook@mritunjaylive.in"
+            className="inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline"
+          >
+            <Mail className="size-4 shrink-0" />
+            rollbook@mritunjaylive.in
+          </a>
+
+          <hr className="border-line" />
+
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = e.target as HTMLFormElement;
+              const subject = (form.elements.namedItem("subject") as HTMLInputElement).value;
+              const message = (form.elements.namedItem("message") as HTMLTextAreaElement).value;
+              window.location.href = `mailto:rollbook@mritunjaylive.in?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
+            }}
+          >
+            <Field label="Subject">
+              <Input name="subject" required placeholder="e.g. Bug report or Feature request" />
+            </Field>
+            <Field label="Message">
+              <textarea
+                name="message"
+                required
+                rows={4}
+                className="flex w-full rounded-md border border-line bg-transparent px-3 py-2 text-sm placeholder:text-ink-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+                placeholder="How can we help you?"
+              />
+            </Field>
+            <Button type="submit">Open Email Client</Button>
+          </form>
         </Card>
       </section>
 
