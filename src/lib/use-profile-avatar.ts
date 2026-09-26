@@ -27,7 +27,7 @@ function getVersion(userId: string): string {
   return localStorage.getItem(versionKey(userId)) ?? "0";
 }
 
-function bumpVersion(userId: string): string {
+export function bumpVersion(userId: string): string {
   const next = String(Date.now()); // ms timestamp = unique enough
   try {
     localStorage.setItem(versionKey(userId), next);
@@ -56,7 +56,8 @@ export function getAvatarUrl(userId: string): string | null {
   const v = getVersion(userId);
   if (v !== "0") return `/api/avatar?v=${v}`;
   // Fallback so any other logged-in device queries the database directly:
-  return `/api/avatar`;
+  // Using ?u=${userId} ensures the browser cache separates different users' fallback requests
+  return `/api/avatar?u=${userId}`;
 }
 
 /**

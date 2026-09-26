@@ -1,6 +1,7 @@
 import { createFileRoute, Link, Navigate, useRouter } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { authClient, authEnabled } from "@/lib/auth/client";
+import { bumpVersion } from "@/lib/use-profile-avatar";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
@@ -44,7 +45,7 @@ function Login() {
         if (err) throw new Error(err.message || "Could not create account.");
         setAwaitingVerification(true);
       } else {
-        const { error: err } = await authClient.signIn.email({
+        const { data, error: err } = await authClient.signIn.email({
           email: email.trim(),
           password,
         });
@@ -54,6 +55,9 @@ function Login() {
             return;
           }
           throw new Error(err.message || "Could not sign in.");
+        }
+        if (data?.user?.id) {
+          bumpVersion(data.user.id);
         }
         await authClient.getSession();
         await router.invalidate();
@@ -89,9 +93,17 @@ function Login() {
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-accent">
           College attendance
         </p>
-        <h1 className="mt-2 font-brand text-4xl font-semibold tracking-widest text-ink">
-          Rollbook
-        </h1>
+        <div className="mt-2 flex items-center gap-2.5">
+          <img
+            src="/favicon.svg"
+            alt=""
+            aria-hidden
+            className="size-10 shrink-0 rounded-[8px]"
+          />
+          <h1 className="font-brand text-4xl font-semibold tracking-widest text-ink">
+            Rollbook
+          </h1>
+        </div>
         <p className="mt-3 max-w-[34ch] text-ink-soft">
           Mark present or absent, watch the 75% line, and keep teacher credit in
           one place, synced with your email.
