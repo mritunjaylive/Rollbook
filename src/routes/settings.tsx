@@ -53,6 +53,7 @@ function SettingsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [semOpen, setSemOpen] = useState(false);
   const [holidayOpen, setHolidayOpen] = useState(false);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const profile = snapshot?.profile;
 
@@ -436,38 +437,25 @@ function SettingsPage() {
 
       <section className="mt-8">
         <h2 className="font-display text-xl font-semibold text-warn">Danger Zone</h2>
-        <Card className="mt-3 space-y-4">
+        <Card className="mt-3 space-y-4 border-warn/20">
           {!profile?.scheduledDeletionDate ? (
-            <>
-              <p className="text-sm text-ink-soft">
-                Delete your account and all associated data. Your summary stats will be archived for 7 days before permanent deletion.
-              </p>
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const form = e.target as HTMLFormElement;
-                  const password = (form.elements.namedItem("password") as HTMLInputElement).value;
-                  try {
-                    await mut.requestAccountDeletion.mutateAsync(password);
-                    window.location.href = "/login";
-                  } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Failed to request deletion");
-                  }
-                }}
-                className="flex items-end gap-3"
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-warn">Delete Account</p>
+                <p className="text-sm text-ink-soft mt-1">
+                  Permanently remove your account and all associated data.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                className="shrink-0 text-warn border-warn/30 hover:bg-warn/10"
+                onClick={() => setDeleteAccountOpen(true)}
               >
-                <div className="flex-1">
-                  <Field label="Password to confirm deletion">
-                    <Input name="password" type="password" required />
-                  </Field>
-                </div>
-                <Button type="submit" variant="outline" className="text-warn border-warn/30 hover:bg-warn/10">
-                  Delete Account
-                </Button>
-              </form>
-            </>
+                Delete Account
+              </Button>
+            </div>
           ) : (
-            <>
+            <div className="space-y-3">
               <p className="text-sm font-semibold text-warn">
                 Account scheduled for deletion on {new Date(profile.scheduledDeletionDate).toLocaleDateString()}
               </p>
@@ -483,14 +471,64 @@ function SettingsPage() {
               >
                 Cancel Deletion & Keep Account
               </Button>
-            </>
+            </div>
           )}
         </Card>
       </section>
 
       <NewSemesterDialog open={semOpen} onOpenChange={setSemOpen} />
       <NewHolidayDialog open={holidayOpen} onOpenChange={setHolidayOpen} />
+      <DeleteAccountDialog open={deleteAccountOpen} onOpenChange={setDeleteAccountOpen} />
     </AppShell>
+  );
+}
+
+function DeleteAccountDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const mut = useRollbookMutations();
+  const [password, setPassword] = useState("");
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title="Confirm Deletion">
+      <div className="space-y-4">
+        <div className="rounded-lg bg-warn-soft p-3 text-sm text-warn">
+          <p className="font-semibold">Are you absolutely sure?</p>
+          <p className="mt-1">
+            This action will initiate the deletion of your account, timetable, and attendance records. You will have a 7-day recovery grace period before permanent deletion.
+          </p>
+        </div>
+        <form
+          className="space-y-3"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            try {
+              await mut.requestAccountDeletion.mutateAsync(password);
+              window.location.href = "/login";
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Incorrect password. Deletion cancelled.");
+            }
+          }}
+        >
+          <Field label="Confirm with your password">
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              placeholder="Enter password"
+            />
+          </Field>
+          <Button type="submit" variant="outline" className="w-full text-white bg-warn hover:bg-warn/90 border-0">
+            Confirm & Delete
+          </Button>
+        </form>
+      </div>
+    </Dialog>
   );
 }
 
