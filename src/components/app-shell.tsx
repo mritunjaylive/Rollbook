@@ -13,7 +13,8 @@ import { ProfileAvatar } from "@/components/profile-avatar";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getAvatarUrl } from "@/lib/use-profile-avatar";
-import { selectActive, useSnapshot } from "@/lib/rollbook/queries";
+import { selectActive, useSnapshot, useRollbookMutations } from "@/lib/rollbook/queries";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -32,7 +33,9 @@ export function AppShell({
   nav?: boolean;
 }) {
   const { user, isPending } = useCurrentUserState();
-  const snapshot = useSnapshot();
+  const snap = useSnapshot();
+  const snapshot = snap.data;
+  const mut = useRollbookMutations();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   
   const profile = snapshot.data?.profile ?? null;
@@ -61,7 +64,9 @@ export function AppShell({
   
   if (!profile && pathname !== "/setup") return <Navigate to="/setup" />;
 
-  const active = selectActive(snapshot.data);
+  if (!profile && pathname !== "/setup") return <Navigate to="/setup" />;
+
+  const active = selectActive(snapshot);
   const subtitle = active.semester
     ? `${active.semester.courseName} · ${active.semester.semesterName}`
     : profile
@@ -102,6 +107,24 @@ export function AppShell({
           ) : null}
         </div>
       </header>
+
+      {profile?.scheduledDeletionDate && new Date(profile.scheduledDeletionDate).getTime() > Date.now() ? (
+        <div className="bg-warn-soft text-warn px-4 py-3 text-sm flex flex-col sm:flex-row items-center justify-between gap-3 border-b border-warn/20">
+          <p>
+            Account scheduled for deletion in {Math.max(1, Math.ceil((new Date(profile.scheduledDeletionDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} days. Timetable and attendance data will be permanently purged on {new Date(profile.scheduledDeletionDate).toLocaleDateString()}.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0 text-warn border-warn/30 hover:bg-warn/10"
+            onClick={async () => {
+              await mut.cancelAccountDeletion.mutateAsync();
+            }}
+          >
+            Cancel Deletion & Keep Account
+          </Button>
+        </div>
+      ) : null}
 
       <main className={cn("flex-1 px-4 py-4", nav && "pb-24")}>{children}</main>
 

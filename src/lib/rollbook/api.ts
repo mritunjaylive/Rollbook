@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { auth } from "@/lib/auth/server";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { newId } from "@/lib/utils";
@@ -27,6 +28,8 @@ type ProfileRow = {
   college_name: string;
   threshold_percent: number;
   has_avatar: boolean;
+  deletion_requested_at: string | null;
+  scheduled_deletion_date: string | null;
 };
 type SemesterRow = {
   id: string;
@@ -94,6 +97,8 @@ function mapProfile(r: ProfileRow): Profile {
     collegeName: r.college_name,
     thresholdPercent: Number(r.threshold_percent),
     hasAvatar: Boolean(r.has_avatar),
+    deletionRequestedAt: r.deletion_requested_at,
+    scheduledDeletionDate: r.scheduled_deletion_date,
   };
 }
 function mapSemester(r: SemesterRow): Semester {
@@ -186,7 +191,7 @@ export const getSnapshot = createServerFn({ method: "GET" })
 
     const [profiles, subjects, periods, attendance, credits, activities, holidays] =
       await Promise.all([
-        sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, (avatar_data is not null) as has_avatar from profiles where user_id = ${uid}`,
+        sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, (avatar_data is not null) as has_avatar, deletion_requested_at, scheduled_deletion_date from profiles where user_id = ${uid}`,
         activeSemId
           ? sql<SubjectRow>`select id, semester_id, name, code, default_teacher, description, closed from subjects where user_id = ${uid} and semester_id = ${activeSemId} order by created_at`
           : Promise.resolve([]),
@@ -221,7 +226,7 @@ export const getFullBackup = createServerFn({ method: "GET" })
     const uid = context.userId;
     const [profiles, semesters, subjects, periods, attendance, credits, activities, holidays] =
       await Promise.all([
-        sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, (avatar_data is not null) as has_avatar from profiles where user_id = ${uid}`,
+        sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, (avatar_data is not null) as has_avatar, deletion_requested_at, scheduled_deletion_date from profiles where user_id = ${uid}`,
         sql<SemesterRow>`select id, course_name, semester_name, start_date, is_active, classes_over from semesters where user_id = ${uid} order by created_at desc`,
         sql<SubjectRow>`select id, semester_id, name, code, default_teacher, description, closed from subjects where user_id = ${uid} order by created_at`,
         sql<PeriodRow>`select id, semester_id, subject_id, day_of_week, period_number, start_time, end_time, teacher_name from periods where user_id = ${uid} order by day_of_week, period_number`,
@@ -1006,4 +1011,93 @@ export const importSharedRoutine = createServerFn({ method: "POST" })
     }
 
     return { newSemesterId: newSemId };
+  });
+
+// Account Deletion
+export const requestAccountDeletion = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: unknown) => z.object({ password: z.string().min(1) }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const uid = context.userId;
+
+    const users = await sql<{ email: string }>`select email from "user" where id = ${uid}`;
+    if (!users[0]) throw new Error("User not found.");
+    const userEmail = users[0].email;
+
+    const check = await auth.api.signInEmail({
+      body: { email: userEmail, password: data.password },
+      asResponse: true,
+    });
+    if (!check.ok) {
+      throw new Error("Incorrect password. Deletion cancelled.");
+    }
+
+    const [profiles, semesters, subjects, periods, attendance, credits, activities, holidays] =
+      await Promise.all([
+        sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, (avatar_data is not null) as has_avatar, deletion_requested_at, scheduled_deletion_date from profiles where user_id = ${uid}`,
+        sql<SemesterRow>`select id, course_name, semester_name, start_date, is_active, classes_over from semesters where user_id = ${uid}`,
+        sql<SubjectRow>`select id, semester_id, name, code, default_teacher, description, closed from subjects where user_id = ${uid}`,
+        sql<PeriodRow>`select id, semester_id, subject_id, day_of_week, period_number, start_time, end_time, teacher_name from periods where user_id = ${uid}`,
+        sql<AttendanceRow>`select id, period_id, date, status from attendance where user_id = ${uid}`,
+        sql<CreditRow>`select id, subject_id, amount, type, teacher_name, granted_on, note from credit_grants where user_id = ${uid}`,
+        sql<ActivityRow>`select id, kind, name, activity_date, start_time, end_time, description, credits from activities where user_id = ${uid}`,
+        sql<HolidayRow>`select id, name, start_date, end_date from holidays where user_id = ${uid}`,
+      ]);
+
+    const snapshot = {
+      profile: profiles[0] ? mapProfile(profiles[0]) : null,
+      semesters: semesters.map(mapSemester),
+      subjects: subjects.map(mapSubject),
+      periods: periods.map(mapPeriod),
+      attendance: attendance.map(mapAttendance),
+      credits: credits.map(mapCredit),
+      activities: activities.map(mapActivity),
+      holidays: holidays.map(mapHoliday),
+    };
+
+    const totalSemesters = semesters.length;
+    const totalSubjects = subjects.length;
+    const totalPeriodsLogged = attendance.length;
+    const presentMarks = attendance.filter((a) => a.status === "present").length;
+    const overallAttendancePercent = totalPeriodsLogged > 0 ? Math.round((presentMarks / totalPeriodsLogged) * 100) : 0;
+
+    const archiveId = newId();
+
+    await sql`
+      insert into deleted_user_archives (
+        id, user_id, college_name, student_id, total_semesters, total_subjects,
+        total_periods_logged, overall_attendance_percent, snapshot_data
+      ) values (
+        ${archiveId}, ${uid}, ${profiles[0]?.college_name ?? ""}, ${profiles[0]?.student_id ?? ""},
+        ${totalSemesters}, ${totalSubjects}, ${totalPeriodsLogged}, ${overallAttendancePercent},
+        ${JSON.stringify(snapshot)}
+      )
+    `;
+
+    await sql`
+      update profiles set
+        deletion_requested_at = now(),
+        scheduled_deletion_date = now() + interval '7 days'
+      where user_id = ${uid}
+    `;
+
+    await sql`delete from "session" where "userId" = ${uid}`;
+
+    const updated = await sql<{ scheduled: string }>`select scheduled_deletion_date as scheduled from profiles where user_id = ${uid}`;
+
+    return { success: true, scheduledDate: updated[0].scheduled };
+  });
+
+export const cancelAccountDeletion = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const sql = await getSql();
+    await sql`
+      update profiles set
+        deletion_requested_at = null,
+        scheduled_deletion_date = null
+      where user_id = ${context.userId}
+    `;
+    return { success: true };
   });

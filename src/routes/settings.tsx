@@ -434,6 +434,60 @@ function SettingsPage() {
         </Card>
       </section>
 
+      <section className="mt-8">
+        <h2 className="font-display text-xl font-semibold text-warn">Danger Zone</h2>
+        <Card className="mt-3 space-y-4">
+          {!profile?.scheduledDeletionDate ? (
+            <>
+              <p className="text-sm text-ink-soft">
+                Delete your account and all associated data. Your summary stats will be archived for 7 days before permanent deletion.
+              </p>
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.target as HTMLFormElement;
+                  const password = (form.elements.namedItem("password") as HTMLInputElement).value;
+                  try {
+                    await mut.requestAccountDeletion.mutateAsync(password);
+                    window.location.href = "/login";
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Failed to request deletion");
+                  }
+                }}
+                className="flex items-end gap-3"
+              >
+                <div className="flex-1">
+                  <Field label="Password to confirm deletion">
+                    <Input name="password" type="password" required />
+                  </Field>
+                </div>
+                <Button type="submit" variant="outline" className="text-warn border-warn/30 hover:bg-warn/10">
+                  Delete Account
+                </Button>
+              </form>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-warn">
+                Account scheduled for deletion on {new Date(profile.scheduledDeletionDate).toLocaleDateString()}
+              </p>
+              <p className="text-sm text-ink-soft">
+                Your account is currently in the 7-day grace period.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full text-warn border-warn/30 hover:bg-warn/10"
+                onClick={async () => {
+                  await mut.cancelAccountDeletion.mutateAsync();
+                }}
+              >
+                Cancel Deletion & Keep Account
+              </Button>
+            </>
+          )}
+        </Card>
+      </section>
+
       <NewSemesterDialog open={semOpen} onOpenChange={setSemOpen} />
       <NewHolidayDialog open={holidayOpen} onOpenChange={setHolidayOpen} />
     </AppShell>

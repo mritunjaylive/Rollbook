@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import * as api from "./api";
 import type {
@@ -354,6 +355,22 @@ export function useRollbookMutations() {
     mutationFn: () => api.getFullBackup(),
   });
 
+  const requestAccountDeletion = useMutation({
+    mutationFn: (password: string) => api.requestAccountDeletion({ data: { password } }),
+    onSuccess: () => {
+      invalidate();
+      qc.clear();
+    },
+  });
+
+  const cancelAccountDeletion = useMutation({
+    mutationFn: () => api.cancelAccountDeletion(),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Account deletion cancelled. Your records are safe.");
+    },
+  });
+
   return {
     upsertProfile,
     upsertSemester,
@@ -376,5 +393,7 @@ export function useRollbookMutations() {
     upsertHoliday,
     deleteHoliday,
     getFullBackup,
+    requestAccountDeletion,
+    cancelAccountDeletion,
   };
 }

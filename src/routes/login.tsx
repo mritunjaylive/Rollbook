@@ -104,10 +104,7 @@ function Login() {
             Rollbook
           </h1>
         </div>
-        <p className="mt-3 max-w-[34ch] text-ink-soft">
-          Mark present or absent, watch the 75% line, and keep teacher credit in
-          one place, synced with your email.
-        </p>
+
 
         {awaitingVerification ? (
           <div className="mt-8 rounded-[calc(var(--radius-xl)+4px)] bg-page p-5 shadow-[var(--shadow-card)]">
