@@ -142,6 +142,38 @@ function authPopupPlugin(): Plugin {
   };
 }
 
+import { createHash } from "node:crypto";
+
+/**
+ * Replaces the __ROLLBOOK_SW_VERSION__ placeholder in public/sw.js with a
+ * short hash derived from the generated JS bundle filenames. This busts the
+ * cache on every deploy so the SW activates a fresh cache and old stale JS
+ * is never served to clients that have the new SW.
+ */
+function rollbookSwPlugin(): Plugin {
+  return {
+    name: "app-builder:rollbook-sw-version",
+    apply: "build",
+    generateBundle(_opts, bundle) {
+      // Collect all JS entry / chunk filenames to derive a stable hash
+      const jsFiles = Object.keys(bundle)
+        .filter((f) => f.endsWith(".js") || f.endsWith(".mjs"))
+        .sort()
+        .join("|");
+      const version = createHash("sha256")
+        .update(jsFiles || String(Date.now()))
+        .digest("hex")
+        .slice(0, 12);
+
+      for (const [fileName, chunk] of Object.entries(bundle)) {
+        if (fileName === "sw.js" && chunk.type === "asset" && typeof chunk.source === "string") {
+          chunk.source = chunk.source.replace(/__ROLLBOOK_SW_VERSION__/g, version);
+        }
+      }
+    },
+  };
+}
+
 // `0.0.0.0:8080` is the live-preview contract — don't change host/port.
 // The dev server starts once `src/router.tsx` and `src/routes/` exist — see
 // AGENTS.md § "First scaffold".
@@ -165,6 +197,8 @@ export default defineConfig(({ command, isPreview }) => ({
     appEnvPlugin(),
     // PWA head + ?install=1 tutorial page; runs before Start/Nitro.
     grokPwaPlugin(),
+    // Stamps __ROLLBOOK_SW_VERSION__ in sw.js at build time.
+    rollbookSwPlugin(),
     tailwindcss(),
     tanstackStart(),
     ...(command === "build" || isPreview

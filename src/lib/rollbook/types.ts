@@ -6,6 +6,7 @@ export type Profile = {
   studentId: string;
   collegeName: string;
   thresholdPercent: number;
+  timezone: string | null;
   hasAvatar?: boolean;
   deletionRequestedAt?: string | null;
   scheduledDeletionDate?: string | null;

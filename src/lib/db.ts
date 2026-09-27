@@ -87,13 +87,23 @@ function toSql(run: Run): Sql {
 
 function createNeonSql(): Promise<Sql> {
   globalRef.__pgSqlPromise__ ??= (async () => {
-    // Regular Postgres driver: node-postgres (`pg`) — works directly with Neon's
-    // pooled endpoint. One pool per process; warm serverless instances reuse it.
+    // node-postgres (`pg`) against Neon's **pooled** endpoint (-pooler hostname).
+    // Serverless rationale: each Vercel function invocation creates its own
+    // `Pool` instance — so keep `max` very low. A small pool per invocation is
+    // correct here; a large max would exhaust Neon free-tier's 25-connection
+    // limit under even modest concurrent traffic.
+    //
+    // Decision: we keep `pg` rather than switching to @neondatabase/serverless
+    // (HTTP driver). The HTTP driver has a different API surface for OID type
+    // parsers (custom `types` option vs. `pg`'s global `types.setTypeParser`)
+    // and the migration complexity isn't worth the marginal benefit given that
+    // the pooled URL + low max cap already solves the connection-exhaustion risk.
     const { Pool, types } = await import("pg");
     types.setTypeParser(OID_INT8, Number);
     types.setTypeParser(OID_DATE, identity);
     types.setTypeParser(OID_INTERVAL, identity);
-    const pool = new Pool({ connectionString: databaseUrl });
+    // max:3 — intentionally low for serverless. See comment above.
+    const pool = new Pool({ connectionString: databaseUrl, max: 3 });
     return toSql(async <T>(text: string, params: unknown[]) => {
       const res = await pool.query(text, params);
       return res.rows as T[];

@@ -27,6 +27,7 @@ type ProfileRow = {
   student_id: string;
   college_name: string;
   threshold_percent: number;
+  timezone: string | null;
   has_avatar: boolean;
   deletion_requested_at: string | null;
   scheduled_deletion_date: string | null;
@@ -96,6 +97,7 @@ function mapProfile(r: ProfileRow): Profile {
     studentId: r.student_id,
     collegeName: r.college_name,
     thresholdPercent: Number(r.threshold_percent),
+    timezone: r.timezone ?? null,
     hasAvatar: Boolean(r.has_avatar),
     deletionRequestedAt: r.deletion_requested_at,
     scheduledDeletionDate: r.scheduled_deletion_date,
@@ -191,7 +193,7 @@ export const getSnapshot = createServerFn({ method: "GET" })
 
     const [profiles, subjects, periods, attendance, credits, activities, holidays] =
       await Promise.all([
-        sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, (avatar_data is not null) as has_avatar, deletion_requested_at, scheduled_deletion_date from profiles where user_id = ${uid}`,
+        sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, timezone, (avatar_data is not null) as has_avatar, deletion_requested_at, scheduled_deletion_date from profiles where user_id = ${uid}`,
         activeSemId
           ? sql<SubjectRow>`select id, semester_id, name, code, default_teacher, description, closed from subjects where user_id = ${uid} and semester_id = ${activeSemId} order by created_at`
           : Promise.resolve([]),
@@ -226,7 +228,7 @@ export const getFullBackup = createServerFn({ method: "GET" })
     const uid = context.userId;
     const [profiles, semesters, subjects, periods, attendance, credits, activities, holidays] =
       await Promise.all([
-        sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, (avatar_data is not null) as has_avatar, deletion_requested_at, scheduled_deletion_date from profiles where user_id = ${uid}`,
+        sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, timezone, (avatar_data is not null) as has_avatar, deletion_requested_at, scheduled_deletion_date from profiles where user_id = ${uid}`,
         sql<SemesterRow>`select id, course_name, semester_name, start_date, is_active, classes_over from semesters where user_id = ${uid} order by created_at desc`,
         sql<SubjectRow>`select id, semester_id, name, code, default_teacher, description, closed from subjects where user_id = ${uid} order by created_at`,
         sql<PeriodRow>`select id, semester_id, subject_id, day_of_week, period_number, start_time, end_time, teacher_name from periods where user_id = ${uid} order by day_of_week, period_number`,
@@ -252,6 +254,8 @@ const profileInput = z.object({
   studentId: z.string().trim().min(1).max(80),
   collegeName: z.string().trim().min(1).max(160),
   thresholdPercent: z.number().int().min(50).max(100).optional(),
+  // Optional — client sends this silently; never required from user input.
+  timezone: z.string().trim().max(60).optional().nullable(),
 });
 
 export const upsertProfile = createServerFn({ method: "POST" })
@@ -261,15 +265,45 @@ export const upsertProfile = createServerFn({ method: "POST" })
     const sql = await getSql();
     const uid = context.userId;
     const threshold = data.thresholdPercent ?? 75;
+    // Only update timezone when explicitly provided (avoid clearing a stored value
+    // when the user edits other profile fields from a client that didn't send it).
+    const tz = data.timezone ?? null;
+    if (tz !== null) {
+      await sql`
+        insert into profiles (user_id, student_name, student_id, college_name, threshold_percent, timezone, updated_at)
+        values (${uid}, ${data.studentName}, ${data.studentId}, ${data.collegeName}, ${threshold}, ${tz}, now())
+        on conflict (user_id) do update set
+          student_name = excluded.student_name,
+          student_id = excluded.student_id,
+          college_name = excluded.college_name,
+          threshold_percent = excluded.threshold_percent,
+          timezone = excluded.timezone,
+          updated_at = now()
+      `;
+    } else {
+      await sql`
+        insert into profiles (user_id, student_name, student_id, college_name, threshold_percent, updated_at)
+        values (${uid}, ${data.studentName}, ${data.studentId}, ${data.collegeName}, ${threshold}, now())
+        on conflict (user_id) do update set
+          student_name = excluded.student_name,
+          student_id = excluded.student_id,
+          college_name = excluded.college_name,
+          threshold_percent = excluded.threshold_percent,
+          updated_at = now()
+      `;
+    }
+    return { ok: true as const };
+  });
+
+/** Silently backfill timezone on the profile row. Called client-side on first load. */
+export const updateTimezone = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: unknown) => z.object({ timezone: z.string().trim().max(60) }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
     await sql`
-      insert into profiles (user_id, student_name, student_id, college_name, threshold_percent, updated_at)
-      values (${uid}, ${data.studentName}, ${data.studentId}, ${data.collegeName}, ${threshold}, now())
-      on conflict (user_id) do update set
-        student_name = excluded.student_name,
-        student_id = excluded.student_id,
-        college_name = excluded.college_name,
-        threshold_percent = excluded.threshold_percent,
-        updated_at = now()
+      update profiles set timezone = ${data.timezone}
+      where user_id = ${context.userId} and (timezone is null or timezone = '')
     `;
     return { ok: true as const };
   });
@@ -392,16 +426,10 @@ export const deleteSubject = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
-const periodInput = z.object({
-  id: z.string().optional(),
-  semesterId: z.string(),
-  subjectId: z.string(),
-  dayOfWeek: z.number().int().min(1).max(6),
-  periodNumber: z.number().int().min(1).max(12),
-  startTime: z.string().min(4).max(8),
-  endTime: z.string().min(4).max(8),
-  teacherName: z.string().trim().max(120).optional(),
-});
+// Intentionally constrained to Monday–Saturday (1–6). Sunday (0 or 7) is
+// deliberately excluded and must NOT be added here. For occasional/exceptional
+// Sunday classes, use the Teacher Credit system (credit_grants / addCreditGrant).
+export { periodInput } from "./days.ts";
 
 export const upsertPeriod = createServerFn({ method: "POST" })
   .middleware([authMiddleware])

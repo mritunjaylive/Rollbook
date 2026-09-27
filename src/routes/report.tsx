@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect } from "react";
 import { selectActive, useSnapshot } from "@/lib/rollbook/queries";
 import { statsForSubject } from "@/lib/rollbook/derive";
 import { Button } from "@/components/ui/button";
-import { Printer } from "lucide-react";
+import { FileDown, Printer } from "lucide-react";
+import { localISODate } from "@/lib/utils";
+import { toast } from "sonner";
+
+import { buildCsv } from "@/lib/rollbook/csv";
 
 export const Route = createFileRoute("/report")({
   component: ReportPage,
@@ -15,7 +18,6 @@ function ReportPage() {
   const active = selectActive(snapshot);
   const profile = snapshot?.profile;
 
-  // Auto-trigger print if query param specifies it, but a manual button is better.
   const threshold = profile?.thresholdPercent ?? 75;
 
   if (!snapshot || !active.semester) {
@@ -27,12 +29,55 @@ function ReportPage() {
   }
 
   const overallAttended = active.subjects.reduce((sum, s) => sum + statsForSubject(snapshot, s.id, threshold).present, 0);
-  const overallHeld = active.subjects.reduce((sum, s) => sum + statsForSubject(snapshot, s.id, threshold).held, 0);
+  const overallHeld = active.subjects.reduce((sum, s) => sum + statsForSubject(snapshot, s.id, threshold).hosted, 0);
   const overallPercent = overallHeld === 0 ? 0 : Math.round((overallAttended / overallHeld) * 100);
+
+  function exportCsv() {
+    try {
+      const rows = active.subjects.map((s) => {
+        const st = statsForSubject(snapshot!, s.id, threshold);
+        // Collect unique, non-empty teacher names from periods for this subject
+        const teacherSet = new Set<string>();
+        snapshot!.periods
+          .filter((p) => p.subjectId === s.id)
+          .forEach((p) => { if (p.teacherName) teacherSet.add(p.teacherName); });
+        if (s.defaultTeacher) teacherSet.add(s.defaultTeacher);
+        return {
+          name: s.name,
+          code: s.code,
+          teachers: [...teacherSet].join("; "),
+          held: st.hosted,
+          present: st.present,
+          absent: st.absent,
+          holiday: st.holiday,
+          cancelled: st.cancelled,
+          teacherCredit: st.teacherCredit,
+          rawPercent: st.rawPercent,
+          effectivePercent: st.effectivePercent,
+          creditNeeded: st.creditNeeded,
+        };
+      });
+
+      const csv = buildCsv(rows);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `rollbook-report-${localISODate()}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not export CSV.");
+    }
+  }
 
   return (
     <div className="min-h-screen bg-white text-black p-8 font-sans print:p-0 print:m-0">
-      <div className="print:hidden mb-8 flex justify-end">
+      <div className="print:hidden mb-8 flex justify-end gap-3">
+        <Button variant="outline" onClick={() => exportCsv()} className="gap-2">
+          <FileDown className="size-4" />
+          Export CSV
+        </Button>
         <Button onClick={() => window.print()} className="gap-2">
           <Printer className="size-4" />
           Print PDF
@@ -66,7 +111,7 @@ function ReportPage() {
         {/* Overall Stats */}
         <div className="mb-10 p-4 bg-gray-50 border border-gray-200 rounded text-center">
           <p className="text-lg">
-            Overall Attendance: <span className="font-bold text-xl">{overallPercent}%</span> 
+            Overall Attendance: <span className="font-bold text-xl">{overallPercent}%</span>{" "}
             <span className="text-sm text-gray-500 ml-2">({overallAttended} / {overallHeld} classes)</span>
           </p>
           <p className="text-xs text-gray-400 mt-1">Required Threshold: {threshold}%</p>
@@ -92,12 +137,12 @@ function ReportPage() {
                 <tr key={s.id} className="border-b border-gray-200">
                   <td className="py-3 px-4 font-medium">{s.name}</td>
                   <td className="py-3 px-4 text-gray-600">{s.defaultTeacher || "—"}</td>
-                  <td className="py-3 px-2 text-right">{stats.held}</td>
+                  <td className="py-3 px-2 text-right">{stats.hosted}</td>
                   <td className="py-3 px-2 text-right">{stats.present}</td>
                   <td className="py-3 px-2 text-right">{stats.absent}</td>
-                  <td className="py-3 px-2 text-right">{stats.totalCredits}</td>
+                  <td className="py-3 px-2 text-right">{stats.teacherCredit}</td>
                   <td className="py-3 px-4 text-right font-semibold">
-                    {stats.percent}%
+                    {stats.effectivePercent != null ? `${stats.effectivePercent.toFixed(1)}%` : "—"}
                   </td>
                 </tr>
               );

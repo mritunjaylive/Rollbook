@@ -71,8 +71,15 @@ export function useRollbookMutations() {
       studentId: string;
       collegeName: string;
       thresholdPercent?: number;
+      timezone?: string | null;
     }) => api.upsertProfile({ data }),
     onSuccess: () => invalidate(),
+  });
+
+  const updateTimezone = useMutation({
+    mutationFn: (timezone: string) => api.updateTimezone({ data: { timezone } }),
+    // Fire-and-forget — no snapshot invalidation needed; profile is re-fetched on
+    // next load anyway.
   });
 
   const upsertSemester = useMutation({
@@ -106,18 +113,114 @@ export function useRollbookMutations() {
       defaultTeacher?: string | null;
       description?: string | null;
     }) => api.upsertSubject({ data }),
-    onSuccess: () => invalidate(),
+    onMutate: async (newData) => {
+      await qc.cancelQueries({ queryKey: SNAPSHOT_KEY });
+      const previousSnapshot = qc.getQueryData<Snapshot>(SNAPSHOT_KEY);
+      if (previousSnapshot) {
+        qc.setQueryData<Snapshot>(SNAPSHOT_KEY, (old) => {
+          if (!old) return old;
+          if (newData.id) {
+            // Edit: update in-place
+            return {
+              ...old,
+              subjects: old.subjects.map((s) =>
+                s.id === newData.id
+                  ? {
+                      ...s,
+                      name: newData.name,
+                      code: newData.code ?? null,
+                      defaultTeacher: newData.defaultTeacher ?? null,
+                      description: newData.description ?? null,
+                    }
+                  : s,
+              ),
+            };
+          } else {
+            // Create: insert temp row
+            return {
+              ...old,
+              subjects: [
+                ...old.subjects,
+                {
+                  id: "temp-" + Date.now(),
+                  semesterId: newData.semesterId,
+                  name: newData.name,
+                  code: newData.code ?? null,
+                  defaultTeacher: newData.defaultTeacher ?? null,
+                  description: newData.description ?? null,
+                  closed: false,
+                },
+              ],
+            };
+          }
+        });
+      }
+      return { previousSnapshot };
+    },
+    onError: (_err, _newData, context) => {
+      if (context?.previousSnapshot) {
+        qc.setQueryData(SNAPSHOT_KEY, context.previousSnapshot);
+      }
+    },
+    onSettled: () => invalidate(),
   });
 
   const setSubjectClosed = useMutation({
     mutationFn: (data: { id: string; closed: boolean }) =>
       api.setSubjectClosed({ data }),
-    onSuccess: () => invalidate(),
+    onMutate: async (newData) => {
+      await qc.cancelQueries({ queryKey: SNAPSHOT_KEY });
+      const previousSnapshot = qc.getQueryData<Snapshot>(SNAPSHOT_KEY);
+      if (previousSnapshot) {
+        qc.setQueryData<Snapshot>(SNAPSHOT_KEY, (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            subjects: old.subjects.map((s) =>
+              s.id === newData.id ? { ...s, closed: newData.closed } : s,
+            ),
+          };
+        });
+      }
+      return { previousSnapshot };
+    },
+    onError: (_err, _newData, context) => {
+      if (context?.previousSnapshot) {
+        qc.setQueryData(SNAPSHOT_KEY, context.previousSnapshot);
+      }
+    },
+    onSettled: () => invalidate(),
   });
 
   const deleteSubject = useMutation({
     mutationFn: (id: string) => api.deleteSubject({ data: { id } }),
-    onSuccess: () => invalidate(),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: SNAPSHOT_KEY });
+      const previousSnapshot = qc.getQueryData<Snapshot>(SNAPSHOT_KEY);
+      if (previousSnapshot) {
+        qc.setQueryData<Snapshot>(SNAPSHOT_KEY, (old) => {
+          if (!old) return old;
+          // Cascade-remove dependent rows to keep stats correct
+          const deletedPeriodIds = new Set(
+            old.periods.filter((p) => p.subjectId === id).map((p) => p.id),
+          );
+          return {
+            ...old,
+            subjects: old.subjects.filter((s) => s.id !== id),
+            periods: old.periods.filter((p) => p.subjectId !== id),
+            attendance: old.attendance.filter((a) => !deletedPeriodIds.has(a.periodId)),
+            credits: old.credits.filter((c) => c.subjectId !== id),
+          };
+        });
+      }
+      return { previousSnapshot };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previousSnapshot) {
+        qc.setQueryData(SNAPSHOT_KEY, context.previousSnapshot);
+      }
+    },
+    onSettled: () => invalidate(),
   });
 
   const upsertPeriod = useMutation({
@@ -131,12 +234,84 @@ export function useRollbookMutations() {
       endTime: string;
       teacherName?: string;
     }) => api.upsertPeriod({ data }),
-    onSuccess: () => invalidate(),
+    onMutate: async (newData) => {
+      await qc.cancelQueries({ queryKey: SNAPSHOT_KEY });
+      const previousSnapshot = qc.getQueryData<Snapshot>(SNAPSHOT_KEY);
+      if (previousSnapshot) {
+        qc.setQueryData<Snapshot>(SNAPSHOT_KEY, (old) => {
+          if (!old) return old;
+          if (newData.id) {
+            // Edit: update in-place
+            return {
+              ...old,
+              periods: old.periods.map((p) =>
+                p.id === newData.id
+                  ? {
+                      ...p,
+                      subjectId: newData.subjectId,
+                      dayOfWeek: newData.dayOfWeek,
+                      periodNumber: newData.periodNumber,
+                      startTime: newData.startTime,
+                      endTime: newData.endTime,
+                      teacherName: newData.teacherName ?? p.teacherName,
+                    }
+                  : p,
+              ),
+            };
+          } else {
+            // Create: insert temp row
+            return {
+              ...old,
+              periods: [
+                ...old.periods,
+                {
+                  id: "temp-" + Date.now(),
+                  semesterId: newData.semesterId,
+                  subjectId: newData.subjectId,
+                  dayOfWeek: newData.dayOfWeek,
+                  periodNumber: newData.periodNumber,
+                  startTime: newData.startTime,
+                  endTime: newData.endTime,
+                  teacherName: newData.teacherName ?? "",
+                },
+              ],
+            };
+          }
+        });
+      }
+      return { previousSnapshot };
+    },
+    onError: (_err, _newData, context) => {
+      if (context?.previousSnapshot) {
+        qc.setQueryData(SNAPSHOT_KEY, context.previousSnapshot);
+      }
+    },
+    onSettled: () => invalidate(),
   });
 
   const deletePeriod = useMutation({
     mutationFn: (id: string) => api.deletePeriod({ data: { id } }),
-    onSuccess: () => invalidate(),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: SNAPSHOT_KEY });
+      const previousSnapshot = qc.getQueryData<Snapshot>(SNAPSHOT_KEY);
+      if (previousSnapshot) {
+        qc.setQueryData<Snapshot>(SNAPSHOT_KEY, (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            periods: old.periods.filter((p) => p.id !== id),
+            attendance: old.attendance.filter((a) => a.periodId !== id),
+          };
+        });
+      }
+      return { previousSnapshot };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previousSnapshot) {
+        qc.setQueryData(SNAPSHOT_KEY, context.previousSnapshot);
+      }
+    },
+    onSettled: () => invalidate(),
   });
 
   const markAttendance = useMutation({
@@ -297,12 +472,58 @@ export function useRollbookMutations() {
       grantedOn: string;
       note?: string | null;
     }) => api.addCreditGrant({ data }),
-    onSuccess: () => invalidate(),
+    onMutate: async (newData) => {
+      await qc.cancelQueries({ queryKey: SNAPSHOT_KEY });
+      const previousSnapshot = qc.getQueryData<Snapshot>(SNAPSHOT_KEY);
+      if (previousSnapshot) {
+        qc.setQueryData<Snapshot>(SNAPSHOT_KEY, (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            credits: [
+              ...old.credits,
+              {
+                id: "temp-" + Date.now(),
+                subjectId: newData.subjectId,
+                amount: newData.amount,
+                type: newData.type,
+                teacherName: newData.teacherName ?? "",
+                grantedOn: newData.grantedOn,
+                note: newData.note ?? null,
+              },
+            ],
+          };
+        });
+      }
+      return { previousSnapshot };
+    },
+    onError: (_err, _newData, context) => {
+      if (context?.previousSnapshot) {
+        qc.setQueryData(SNAPSHOT_KEY, context.previousSnapshot);
+      }
+    },
+    onSettled: () => invalidate(),
   });
 
   const deleteCreditGrant = useMutation({
     mutationFn: (id: string) => api.deleteCreditGrant({ data: { id } }),
-    onSuccess: () => invalidate(),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: SNAPSHOT_KEY });
+      const previousSnapshot = qc.getQueryData<Snapshot>(SNAPSHOT_KEY);
+      if (previousSnapshot) {
+        qc.setQueryData<Snapshot>(SNAPSHOT_KEY, (old) => {
+          if (!old) return old;
+          return { ...old, credits: old.credits.filter((c) => c.id !== id) };
+        });
+      }
+      return { previousSnapshot };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previousSnapshot) {
+        qc.setQueryData(SNAPSHOT_KEY, context.previousSnapshot);
+      }
+    },
+    onSettled: () => invalidate(),
   });
 
   const upsertActivity = useMutation({
@@ -373,6 +594,7 @@ export function useRollbookMutations() {
 
   return {
     upsertProfile,
+    updateTimezone,
     upsertSemester,
     setActiveSemester,
     setSemesterClassesOver,

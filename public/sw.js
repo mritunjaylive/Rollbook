@@ -1,5 +1,18 @@
-const CACHE_NAME = "rollbook-cache-v1";
+// CACHE_VERSION is replaced at build time by the rollbookSwPlugin in vite.config.ts.
+// During dev this stays as the literal placeholder; the service worker is
+// effectively disabled for JS/CSS in dev anyway (Vite serves everything fresh).
+const CACHE_VERSION = "__ROLLBOOK_SW_VERSION__";
+const CACHE_NAME = `rollbook-cache-${CACHE_VERSION}`;
 const OFFLINE_URL = "/";
+
+// Assets that are truly immutable once deployed (hashed filenames).
+// Everything else — including JS/CSS bundles and HTML — uses network-first.
+const STATIC_ASSET_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico", ".woff2", ".woff"];
+
+function isStaticAsset(url) {
+  const pathname = new URL(url).pathname;
+  return STATIC_ASSET_EXTENSIONS.some((ext) => pathname.endsWith(ext));
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -31,14 +44,31 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (event.request.mode === "navigate") {
+  // Navigation requests and JS/CSS: network-first, fall back to cache when offline
+  if (event.request.mode === "navigate" || !isStaticAsset(url.href)) {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match(OFFLINE_URL))
+      fetch(event.request)
+        .then((networkResponse) => {
+          // Cache a fresh copy for offline fallback
+          if (
+            networkResponse &&
+            networkResponse.status === 200 &&
+            (networkResponse.type === "basic" || networkResponse.type === "cors")
+          ) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request).then((cached) => cached ?? caches.match(OFFLINE_URL)))
     );
     return;
   }
 
-  // Stale-While-Revalidate strategy for static assets
+  // Truly static assets (icons/images with hashed or stable names):
+  // cache-first for speed, revalidate in background
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request).then((networkResponse) => {
@@ -50,7 +80,7 @@ self.addEventListener("fetch", (event) => {
         }
         return networkResponse;
       }).catch(() => {
-        // Ignore network errors for stale-while-revalidate when offline
+        // Ignore network errors when we already have a cached asset
       });
 
       return cachedResponse || fetchPromise;

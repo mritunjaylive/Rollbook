@@ -73,6 +73,7 @@
 - **Semester Structure**: Organize academic sessions with start dates, course name, semester title, and active flags.
 - **Dynamic Weekly Timetable**:
   - Configure recurring classes by weekday (Monday–Saturday).
+  - Routine is intentionally Monday–Saturday only; Sunday is excluded and will not become a recurring routine day.
   - Slot by period number, start time, end time.
   - Per-slot teacher override — different faculty for the same subject on different days is fully supported.
   - Conflict prevention and unique indexing over `(user_id, semester_id, day_of_week, period_number)`.
@@ -100,7 +101,7 @@
   - `notes` — Class notes transcription / sharing
   - `assignment` — Timely assignment submission bonus
   - `project` — Lab, hackathon, or capstone deliverables
-  - `other` — Discretionary attendance grants
+  - `other` — Discretionary attendance grants (e.g. an occasional Sunday class, workshop, or fest with an academic component)
 - **Audit Trail**: Every credit record tracks granting teacher, date granted, point value, and optional context note.
 
 ### 5. Visual Analytics & Calendar
@@ -436,7 +437,7 @@ cp .env.example .env
 
 | Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | Optional | Connection string for Neon / PostgreSQL. If omitted, Rollbook runs on embedded in-memory PGLite. |
+| `DATABASE_URL` | Optional | Connection string for Neon / PostgreSQL. Use Neon's pooled endpoint (`-pooler` hostname) to avoid connection exhaustion on serverless. If omitted, Rollbook runs on embedded in-memory PGLite. |
 | `BETTER_AUTH_SECRET` | Required for Auth | Secret signing key for session tokens. |
 | `BETTER_AUTH_URL` | Optional | Host URL (default: `http://localhost:8080`). |
 | `VITE_AUTH_ENABLED` | Required for Auth | Set to `true` when `DATABASE_URL` is configured. |
@@ -474,7 +475,7 @@ npm run dev
 Rollbook is designed for frictionless zero-config deployment on **Vercel** or any Node/Docker serverless platform:
 
 1. **Deploy to Vercel**: Connect the repository to Vercel.
-2. **Environment Variables**: Add `DATABASE_URL` pointing to your [Neon](https://neon.tech) PostgreSQL instance, set `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `VITE_AUTH_ENABLED=true`, and `RESEND_API_KEY` for password reset emails. See `.env.example` for the full list.
+2. **Environment Variables**: Add `DATABASE_URL` pointing to your [Neon](https://neon.tech) PostgreSQL instance (always use the pooled connection string containing `-pooler` in the hostname to avoid connection exhaustion on serverless), set `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `VITE_AUTH_ENABLED=true`, and `RESEND_API_KEY` for password reset emails. See `.env.example` for the full list.
 3. **Build Command**: The default build script (`npm run build`) automatically applies all SQL migrations before completing deployment.
 
 ### Author

@@ -31,6 +31,60 @@
     0 2px 8px -2px rgba(28, 24, 20, 0.05);
 }
 
+/* ── Dark-mode tokens ───────────────────────────────────────────────────────
+   Applied via [data-theme="dark"] on <html> (explicit user toggle) or via
+   prefers-color-scheme when no explicit choice has been stored.
+   Using attribute selector means no flash when the preference is already set
+   before React mounts — see the inline script in __root.tsx that reads
+   localStorage and sets the attribute synchronously. */
+@layer base {
+  [data-theme="dark"] {
+    --color-paper: #1a1714;
+    --color-page: #211e1a;
+    --color-ink: #f0ebe3;
+    --color-ink-soft: #a89f96;
+    --color-ink-faint: #6b6459;
+    --color-line: #352f28;
+    --color-line-strong: #4a4038;
+    --color-accent: #4d9e96;
+    --color-accent-fg: #0f1f1d;
+    --color-safe: #3daa80;
+    --color-safe-soft: #0e2920;
+    --color-warn: #e06050;
+    --color-warn-soft: #3a1510;
+    --color-present: #3daa80;
+    --color-absent: #e06050;
+    --shadow-card:
+      0 0 0 1px rgba(0, 0, 0, 0.3),
+      0 1px 2px -1px rgba(0, 0, 0, 0.3),
+      0 2px 8px -2px rgba(0, 0, 0, 0.25);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --color-paper: #1a1714;
+      --color-page: #211e1a;
+      --color-ink: #f0ebe3;
+      --color-ink-soft: #a89f96;
+      --color-ink-faint: #6b6459;
+      --color-line: #352f28;
+      --color-line-strong: #4a4038;
+      --color-accent: #4d9e96;
+      --color-accent-fg: #0f1f1d;
+      --color-safe: #3daa80;
+      --color-safe-soft: #0e2920;
+      --color-warn: #e06050;
+      --color-warn-soft: #3a1510;
+      --color-present: #3daa80;
+      --color-absent: #e06050;
+      --shadow-card:
+        0 0 0 1px rgba(0, 0, 0, 0.3),
+        0 1px 2px -1px rgba(0, 0, 0, 0.3),
+        0 2px 8px -2px rgba(0, 0, 0, 0.25);
+    }
+  }
+}
+
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;

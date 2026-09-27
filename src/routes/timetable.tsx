@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Pencil, Plus, Trash2, Share2, Link as LinkIcon, Check } from "lucide-react";
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { createSharedRoutine } from "@/lib/rollbook/api";
 import { AppShell } from "@/components/app-shell";
@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select } from "@/components/ui/input";
 import { WEEKDAYS, weekdayName } from "@/lib/rollbook/days";
+import { mostRecentTeacherForSubject, teacherNamesForSubject } from "@/lib/rollbook/derive";
 import { selectActive, useRollbookMutations, useSnapshot } from "@/lib/rollbook/queries";
 import type { Period } from "@/lib/rollbook/types";
 import { cn } from "@/lib/utils";
@@ -197,6 +198,7 @@ function TimetablePage() {
           period={editing === "new" ? null : editing}
           semesterId={active.semester.id}
           subjects={active.subjects}
+          allPeriods={active.periods}
           defaultDay={day}
           onClose={() => setEditing(null)}
         />
@@ -216,12 +218,14 @@ function PeriodDialog({
   period,
   semesterId,
   subjects,
+  allPeriods,
   defaultDay,
   onClose,
 }: {
   period: Period | null;
   semesterId: string;
   subjects: { id: string; name: string; defaultTeacher: string | null }[];
+  allPeriods: Period[];
   defaultDay: number;
   onClose: () => void;
 }) {
@@ -231,9 +235,214 @@ function PeriodDialog({
   const [periodNumber, setPeriodNumber] = useState(period?.periodNumber ?? 1);
   const [startTime, setStartTime] = useState(period?.startTime ?? "09:00");
   const [endTime, setEndTime] = useState(period?.endTime ?? "09:50");
-  const [teacherName, setTeacherName] = useState(
-    period?.teacherName ?? subjects.find((s) => s.id === (period?.subjectId ?? subjects[0]?.id))?.defaultTeacher ?? "",
-  );
+
+  // Prefill teacher: for new periods use the most recently used teacher for that subject
+  const resolveInitialTeacher = (sId: string) => {
+    const subj = subjects.find((s) => s.id === sId) ?? null;
+    if (!subj) return "";
+    if (period) return period.teacherName; // editing: keep current value
+    return mostRecentTeacherForSubject(allPeriods, subj);
+  };
+  const [teacherName, setTeacherName] = useState(() => resolveInitialTeacher(subjectId));
+
+  // "Copy to…" UI state
+  const [copying, setCopying] = useState(false);
+  type Slot = { dayOfWeek: number; periodNumber: number };
+  const [selectedSlots, setSelectedSlots] = useState<Slot[]>([]);
+  const [copyDay, setCopyDay] = useState(WEEKDAYS[0].n);
+  const [copyPeriodNum, setCopyPeriodNum] = useState(1);
+
+  // Teacher autocomplete list for the currently selected subject
+  const teacherOptions = useMemo(() => {
+    const subj = subjects.find((s) => s.id === subjectId);
+    if (!subj) return [];
+    return teacherNamesForSubject(allPeriods, subj);
+  }, [subjectId, allPeriods, subjects]);
+
+  const datalistId = `teacher-options-${subjectId}`;
+
+  // Overwrite warnings for copy destinations
+  const slotHasPeriod = (day: number, num: number) =>
+    allPeriods.some((p) => p.dayOfWeek === day && p.periodNumber === num);
+
+  const isCurrentSlot = (day: number, num: number) =>
+    period !== null && period.dayOfWeek === day && period.periodNumber === num;
+
+  const toggleSlot = (day: number, num: number) => {
+    setSelectedSlots((prev) => {
+      const existing = prev.findIndex((s) => s.dayOfWeek === day && s.periodNumber === num);
+      return existing >= 0
+        ? prev.filter((_, i) => i !== existing)
+        : [...prev, { dayOfWeek: day, periodNumber: num }];
+    });
+  };
+
+  const isSlotSelected = (day: number, num: number) =>
+    selectedSlots.some((s) => s.dayOfWeek === day && s.periodNumber === num);
+
+  async function handleCopyConfirm() {
+    if (selectedSlots.length === 0) return;
+    try {
+      await Promise.all(
+        selectedSlots.map((slot) =>
+          mut.upsertPeriod.mutateAsync({
+            semesterId,
+            subjectId,
+            dayOfWeek: slot.dayOfWeek,
+            periodNumber: slot.periodNumber,
+            startTime,
+            endTime,
+            teacherName,
+          }),
+        ),
+      );
+      toast.success(
+        selectedSlots.length === 1
+          ? "Period copied to 1 slot."
+          : `Period copied to ${selectedSlots.length} slots.`,
+      );
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not copy period.");
+    }
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await mut.upsertPeriod.mutateAsync({
+        id: period?.id,
+        semesterId,
+        subjectId,
+        dayOfWeek,
+        periodNumber,
+        startTime,
+        endTime,
+        teacherName,
+      });
+      // Auto-backfill defaultTeacher if subject has none and user typed one
+      if (teacherName) {
+        const subj = subjects.find((s) => s.id === subjectId);
+        if (subj && !subj.defaultTeacher) {
+          await mut.upsertSubject.mutateAsync({
+            id: subjectId,
+            semesterId,
+            name: subj.name,
+            code: null,
+            defaultTeacher: teacherName,
+            description: null,
+          });
+        }
+      }
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save period.");
+    }
+  }
+
+  if (copying) {
+    const overwriteSlots = selectedSlots.filter((s) =>
+      slotHasPeriod(s.dayOfWeek, s.periodNumber),
+    );
+    return (
+      <Dialog
+        open
+        onOpenChange={(o) => { if (!o) onClose(); }}
+        title="Copy to…"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-ink-soft">
+            Pick destination day + period slots. The source period's subject,
+            teacher, and times will be copied.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Day">
+              <Select value={String(copyDay)} onChange={(e) => setCopyDay(Number(e.target.value))}>
+                {WEEKDAYS.map((d) => (
+                  <option key={d.n} value={d.n}>{d.full}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Period no.">
+              <Input
+                type="number"
+                min={1}
+                max={12}
+                value={copyPeriodNum}
+                onChange={(e) => setCopyPeriodNum(Number(e.target.value) || 1)}
+              />
+            </Field>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full"
+            onClick={() => {
+              if (!isCurrentSlot(copyDay, copyPeriodNum)) {
+                toggleSlot(copyDay, copyPeriodNum);
+              }
+            }}
+            disabled={isCurrentSlot(copyDay, copyPeriodNum)}
+          >
+            {isCurrentSlot(copyDay, copyPeriodNum)
+              ? "That's the source slot"
+              : isSlotSelected(copyDay, copyPeriodNum)
+              ? "✓ Remove slot"
+              : "+ Add slot"}
+          </Button>
+
+          {selectedSlots.length > 0 && (
+            <ul className="mt-1 space-y-1 text-sm">
+              {selectedSlots.map((s) => (
+                <li
+                  key={`${s.dayOfWeek}-${s.periodNumber}`}
+                  className="flex items-center justify-between rounded-[var(--radius-sm)] bg-paper px-3 py-1.5"
+                >
+                  <span>
+                    {WEEKDAYS.find((d) => d.n === s.dayOfWeek)?.full} · Period {s.periodNumber}
+                    {slotHasPeriod(s.dayOfWeek, s.periodNumber) && (
+                      <span className="ml-1 text-warn text-xs">(will overwrite)</span>
+                    )}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-warn text-xs"
+                    onClick={() => toggleSlot(s.dayOfWeek, s.periodNumber)}
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {overwriteSlots.length > 0 && (
+            <p className="rounded-[var(--radius-sm)] bg-warn-soft px-3 py-2 text-sm text-warn">
+              {overwriteSlots.length === 1
+                ? "1 slot already has a period and will be overwritten."
+                : `${overwriteSlots.length} slots already have periods and will be overwritten.`}
+            </p>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <Button type="button" variant="outline" onClick={() => setCopying(false)}>
+              ← Back
+            </Button>
+            <Button
+              type="button"
+              className="ml-auto"
+              disabled={selectedSlots.length === 0 || mut.upsertPeriod.isPending}
+              onClick={() => void handleCopyConfirm()}
+            >
+              {mut.upsertPeriod.isPending
+                ? "Copying…"
+                : `Copy to ${selectedSlots.length} slot${selectedSlots.length === 1 ? "" : "s"}`}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog
@@ -243,34 +452,29 @@ function PeriodDialog({
       }}
       title={period ? "Edit period" : "Add period"}
     >
+      <datalist id={datalistId}>
+        {teacherOptions.map((t) => (
+          <option key={t} value={t} />
+        ))}
+      </datalist>
       <form
         className="space-y-3"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          try {
-            await mut.upsertPeriod.mutateAsync({
-              id: period?.id,
-              semesterId,
-              subjectId,
-              dayOfWeek,
-              periodNumber,
-              startTime,
-              endTime,
-              teacherName,
-            });
-            onClose();
-          } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Could not save period.");
-          }
-        }}
+        onSubmit={(e) => void handleSave(e)}
       >
         <Field label="Subject">
           <Select
             value={subjectId}
             onChange={(e) => {
-              setSubjectId(e.target.value);
-              const t = subjects.find((s) => s.id === e.target.value)?.defaultTeacher;
-              if (t && !teacherName) setTeacherName(t);
+              const newId = e.target.value;
+              setSubjectId(newId);
+              // Only prefill teacher when adding new (don't clobber edit values)
+              if (!period) {
+                const subj = subjects.find((s) => s.id === newId) ?? null;
+                if (subj) setTeacherName(mostRecentTeacherForSubject(allPeriods, subj));
+              } else {
+                const t = subjects.find((s) => s.id === newId)?.defaultTeacher;
+                if (t && !teacherName) setTeacherName(t);
+              }
             }}
           >
             {subjects.map((s) => (
@@ -312,22 +516,37 @@ function PeriodDialog({
           </Field>
         </div>
         <Field label="Teacher">
-          <Input value={teacherName} onChange={(e) => setTeacherName(e.target.value)} />
+          <input
+            className="h-11 w-full rounded-[var(--radius-md)] border border-line bg-page px-3 text-ink shadow-[inset_0_1px_0_rgba(28,24,20,0.02)] placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            list={datalistId}
+            value={teacherName}
+            onChange={(e) => setTeacherName(e.target.value)}
+            placeholder="Teacher name"
+          />
         </Field>
         <div className="flex gap-2 pt-1">
           {period ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="text-warn"
-              onClick={async () => {
-                if (!confirm("Delete this period?")) return;
-                await mut.deletePeriod.mutateAsync(period.id);
-                onClose();
-              }}
-            >
-              Delete
-            </Button>
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="text-warn"
+                onClick={async () => {
+                  if (!confirm("Delete this period?")) return;
+                  await mut.deletePeriod.mutateAsync(period.id);
+                  onClose();
+                }}
+              >
+                Delete
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => { setSelectedSlots([]); setCopying(true); }}
+              >
+                Copy to…
+              </Button>
+            </>
           ) : null}
           <Button type="submit" className="ml-auto" disabled={mut.upsertPeriod.isPending}>
             Save
@@ -337,6 +556,7 @@ function PeriodDialog({
     </Dialog>
   );
 }
+
 
 function ShareDialog({ semesterId, onClose }: { semesterId: string; onClose: () => void }) {
   const [loading, setLoading] = useState(false);

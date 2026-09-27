@@ -14,6 +14,7 @@ import {
   Twitter,
   Mail,
   Calendar,
+  Laptop,
 } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
@@ -322,6 +323,16 @@ function SettingsPage() {
               Enable
             </Button>
           </div>
+        </Card>
+      </section>
+
+      <section className="mt-8 space-y-3">
+        <h2 className="font-display text-xl font-semibold">Appearance</h2>
+        <Card>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-faint mb-3">
+            Theme
+          </p>
+          <ThemeToggle />
         </Card>
       </section>
 
@@ -805,5 +816,89 @@ function NewHolidayDialog({
         </Button>
       </form>
     </Dialog>
+  );
+}
+
+type ThemeChoice = "light" | "dark" | "system";
+
+function applyTheme(choice: ThemeChoice) {
+  if (typeof window === "undefined") return;
+  if (choice === "light") {
+    document.documentElement.setAttribute("data-theme", "light");
+  } else if (choice === "dark") {
+    document.documentElement.setAttribute("data-theme", "dark");
+  } else {
+    // system
+    if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      document.documentElement.setAttribute("data-theme", "dark");
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
+  }
+}
+
+function ThemeToggle() {
+  const [theme, setTheme] = useState<ThemeChoice>(() => {
+    if (typeof window === "undefined") return "system";
+    return (localStorage.getItem("rollbook-theme") as ThemeChoice) || "system";
+  });
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const listener = () => {
+      const stored = localStorage.getItem("rollbook-theme") as ThemeChoice | null;
+      if (!stored || stored === "system") {
+        applyTheme("system");
+      }
+    };
+    media.addEventListener("change", listener);
+    return () => media.removeEventListener("change", listener);
+  }, []);
+
+  const handleSelect = (choice: ThemeChoice) => {
+    setTheme(choice);
+    localStorage.setItem("rollbook-theme", choice);
+    applyTheme(choice);
+  };
+
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      <button
+        type="button"
+        onClick={() => handleSelect("light")}
+        className={`flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+          theme === "light"
+            ? "border-accent bg-accent text-accent-fg shadow-xs"
+            : "border-line bg-page text-ink-soft hover:bg-paper hover:text-ink"
+        }`}
+      >
+        <Sun className="size-4" />
+        Light
+      </button>
+      <button
+        type="button"
+        onClick={() => handleSelect("system")}
+        className={`flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+          theme === "system"
+            ? "border-accent bg-accent text-accent-fg shadow-xs"
+            : "border-line bg-page text-ink-soft hover:bg-paper hover:text-ink"
+        }`}
+      >
+        <Laptop className="size-4" />
+        System
+      </button>
+      <button
+        type="button"
+        onClick={() => handleSelect("dark")}
+        className={`flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+          theme === "dark"
+            ? "border-accent bg-accent text-accent-fg shadow-xs"
+            : "border-line bg-page text-ink-soft hover:bg-paper hover:text-ink"
+        }`}
+      >
+        <Moon className="size-4" />
+        Dark
+      </button>
+    </div>
   );
 }
