@@ -429,7 +429,8 @@ export const deleteSubject = createServerFn({ method: "POST" })
 // Intentionally constrained to Monday–Saturday (1–6). Sunday (0 or 7) is
 // deliberately excluded and must NOT be added here. For occasional/exceptional
 // Sunday classes, use the Teacher Credit system (credit_grants / addCreditGrant).
-export { periodInput } from "./days.ts";
+import { periodInput } from "./days.ts";
+export { periodInput };
 
 export const upsertPeriod = createServerFn({ method: "POST" })
   .middleware([authMiddleware])

@@ -516,8 +516,7 @@ function PeriodDialog({
           </Field>
         </div>
         <Field label="Teacher">
-          <input
-            className="h-11 w-full rounded-[var(--radius-md)] border border-line bg-page px-3 text-ink shadow-[inset_0_1px_0_rgba(28,24,20,0.02)] placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+          <Input
             list={datalistId}
             value={teacherName}
             onChange={(e) => setTeacherName(e.target.value)}

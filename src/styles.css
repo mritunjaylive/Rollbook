@@ -3,6 +3,7 @@
 @theme {
   --color-paper: #f3eee4;
   --color-page: #faf7f0;
+  --color-field: #faf7f0;
   --color-ink: #1c1814;
   --color-ink-soft: #5e564c;
   --color-ink-faint: #8a8176;
@@ -39,48 +40,50 @@
    localStorage and sets the attribute synchronously. */
 @layer base {
   [data-theme="dark"] {
-    --color-paper: #1a1714;
-    --color-page: #211e1a;
-    --color-ink: #f0ebe3;
-    --color-ink-soft: #a89f96;
-    --color-ink-faint: #6b6459;
-    --color-line: #352f28;
-    --color-line-strong: #4a4038;
-    --color-accent: #4d9e96;
-    --color-accent-fg: #0f1f1d;
-    --color-safe: #3daa80;
-    --color-safe-soft: #0e2920;
-    --color-warn: #e06050;
-    --color-warn-soft: #3a1510;
-    --color-present: #3daa80;
-    --color-absent: #e06050;
+    --color-paper: #09090b;
+    --color-page: #121215;
+    --color-field: #0a0a0d;
+    --color-ink: #f4f4f6;
+    --color-ink-soft: #a1a1aa;
+    --color-ink-faint: #80808a;
+    --color-line: #27272a;
+    --color-line-strong: #3f3f46;
+    --color-accent: #2dd4bf;
+    --color-accent-fg: #042f2e;
+    --color-safe: #34d399;
+    --color-safe-soft: #064e3b;
+    --color-warn: #f87171;
+    --color-warn-soft: #450a0a;
+    --color-present: #34d399;
+    --color-absent: #f87171;
     --shadow-card:
-      0 0 0 1px rgba(0, 0, 0, 0.3),
-      0 1px 2px -1px rgba(0, 0, 0, 0.3),
-      0 2px 8px -2px rgba(0, 0, 0, 0.25);
+      0 0 0 1px rgba(255, 255, 255, 0.08),
+      0 1px 2px -1px rgba(0, 0, 0, 0.5),
+      0 4px 12px -2px rgba(0, 0, 0, 0.4);
   }
 
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --color-paper: #1a1714;
-      --color-page: #211e1a;
-      --color-ink: #f0ebe3;
-      --color-ink-soft: #a89f96;
-      --color-ink-faint: #6b6459;
-      --color-line: #352f28;
-      --color-line-strong: #4a4038;
-      --color-accent: #4d9e96;
-      --color-accent-fg: #0f1f1d;
-      --color-safe: #3daa80;
-      --color-safe-soft: #0e2920;
-      --color-warn: #e06050;
-      --color-warn-soft: #3a1510;
-      --color-present: #3daa80;
-      --color-absent: #e06050;
+      --color-paper: #09090b;
+      --color-page: #121215;
+      --color-field: #0a0a0d;
+      --color-ink: #f4f4f6;
+      --color-ink-soft: #a1a1aa;
+      --color-ink-faint: #80808a;
+      --color-line: #27272a;
+      --color-line-strong: #3f3f46;
+      --color-accent: #2dd4bf;
+      --color-accent-fg: #042f2e;
+      --color-safe: #34d399;
+      --color-safe-soft: #064e3b;
+      --color-warn: #f87171;
+      --color-warn-soft: #450a0a;
+      --color-present: #34d399;
+      --color-absent: #f87171;
       --shadow-card:
-        0 0 0 1px rgba(0, 0, 0, 0.3),
-        0 1px 2px -1px rgba(0, 0, 0, 0.3),
-        0 2px 8px -2px rgba(0, 0, 0, 0.25);
+        0 0 0 1px rgba(255, 255, 255, 0.08),
+        0 1px 2px -1px rgba(0, 0, 0, 0.5),
+        0 4px 12px -2px rgba(0, 0, 0, 0.4);
     }
   }
 }

@@ -8,7 +8,7 @@ import type {
 import { cn } from "@/lib/utils";
 
 const fieldClass =
-  "h-11 w-full rounded-[var(--radius-md)] border border-line bg-page px-3 text-ink shadow-[inset_0_1px_0_rgba(28,24,20,0.02)] placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20";
+  "h-11 w-full rounded-[var(--radius-md)] border border-line bg-[var(--color-field,var(--color-page))] px-3 text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 transition-colors";
 
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cn(fieldClass, className)} {...props} />;

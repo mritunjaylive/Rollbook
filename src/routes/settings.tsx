@@ -3,6 +3,7 @@ import {
   Bell,
   Camera,
   Github,
+  Globe,
   Linkedin,
   LogOut,
   Moon,
@@ -392,6 +393,17 @@ function SettingsPage() {
             </p>
             <p className="font-medium text-ink">Mritunjay Pandey</p>
             <ul className="mt-2 space-y-2">
+              <li>
+                <a
+                  href="https://mritunjaylive.in"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
+                >
+                  <Globe className="size-4 shrink-0" />
+                  mritunjaylive.in
+                </a>
+              </li>
               <li>
                 <a
                   href="https://x.com/mritunjaylive"

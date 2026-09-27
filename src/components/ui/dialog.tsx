@@ -19,7 +19,7 @@ export function Dialog({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-ink/40" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/70 backdrop-blur-xs transition-opacity" />
         <DialogPrimitive.Content
           className={cn(
             "fixed inset-x-3 top-[8%] z-50 mx-auto max-h-[84dvh] overflow-y-auto rounded-[var(--radius-xl)] bg-page p-5 shadow-[var(--shadow-card)] focus:outline-none sm:inset-x-auto sm:top-[10%] sm:left-1/2 sm:-translate-x-1/2",
