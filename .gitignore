@@ -3,7 +3,15 @@ node_modules/
 
 # ─── Build output ─────────────────────────────────────────────────────────────
 dist/
-.vercel/output/
+.vercel/
+.output/
+
+# ─── Test & Coverage output ───────────────────────────────────────────────────
+coverage/
+*.lcov
+test-results/
+playwright-report/
+blob-report/
 
 # ─── Environment / secrets ────────────────────────────────────────────────────
 # Never commit real env files — use .env.example as the template
@@ -16,20 +24,19 @@ dist/
 .project_id
 .node_modules.lock
 startup.sh
-AGENTS.md
+AGENTS*.md
 artifacts/
 
 # ─── QA screenshots (generated at runtime) ───────────────────────────────────
-screenshots/*.png
-screenshots/*.jpg
-screenshots/*.json
+screenshots/*
 # keep the directory itself so CI can write into it
 !screenshots/.gitkeep
 
 # ─── Framework / tooling caches ───────────────────────────────────────────────
 .tanstack/
 .nitro/
-.output/
+.cache/
+.vite/
 
 # TanStack Router auto-generated file — regenerated on every dev/build run
 src/routeTree.gen.ts
@@ -37,16 +44,25 @@ src/routeTree.gen.ts
 # ─── OS / editor noise ────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+ehthumbs.db
 *.swp
 *.swo
 .idea/
 .vscode/
+*.sublime-workspace
+*.sublime-project
 
 # ─── Logs ─────────────────────────────────────────────────────────────────────
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# --- Database files ---
+# ─── Database files ───────────────────────────────────────────────────────────
 *.db
+*.db-journal
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
