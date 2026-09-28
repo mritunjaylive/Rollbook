@@ -9,7 +9,7 @@
 - [Overview](#overview)
 - [Key Features](#key-features)
   - [1. Dashboard & Quick Mark](#1-dashboard--quick-mark)
-  - [2. Timetable & Schedule Management](#2-timetable--schedule-management)
+  - [2. Semesters & Routines](#2-semesters--routines)
   - [3. Intelligent Attendance & Bunk Intelligence](#3-intelligent-attendance--bunk-intelligence)
   - [4. Teacher Credit System](#4-teacher-credit-system)
   - [5. Visual Analytics & Calendar](#5-visual-analytics--calendar)
@@ -41,6 +41,7 @@
 
 **Rollbook** is designed specifically for college and university students managing attendance percentage requirements (e.g., 75% or 80% threshold). Unlike generic tracker apps, Rollbook factors in real-world academic dynamics:
 
+- **Term → Routine hierarchy** — Academic years are organized into **Semesters** (Terms) which contain one or more **Routines** (timetables). Switch between routines within the same semester without losing history; view term-wide aggregated attendance across all routines.
 - **Timetable-driven sessions** with period numbers, time slots, day-of-week slots, and per-slot teacher allocations.
 - **Multi-teacher support** — each period slot can have its own teacher override on top of the subject's default faculty.
 - **Teacher credit allowances** (compensatory attendance for assignments, notes, lab work, or departmental projects).
@@ -69,20 +70,27 @@
   - **Safe / Unsafe Badges**: Instantly see if you are above or below your attendance threshold with visual indicator badges on each subject.
 - **Offline Marking Queue**: Marks your attendance securely using IndexedDB when cellular connectivity is poor. A Service Worker background sync automatically uploads your pending queue as soon as you reconnect, even if you've closed the app.
 
-### 2. Timetable & Schedule Management
-- **Semester Structure**: Organize academic sessions with start dates, course name, semester title, and active flags.
+### 2. Semesters & Routines
+- **Two-level hierarchy**:
+  - **Semester** (Term) — the academic period, e.g. "Odd Semester 2025-26". Carries a session label (e.g. "2025-26"), optional start/end dates, and an `is_active` flag.
+  - **Routine** — the weekly timetable inside a semester. A semester can have multiple routines (e.g. before and after a mid-semester schedule change).
+- **Semester management** (Settings → Semesters):
+  - Create, rename, activate, or delete semesters.
+  - Switching to a semester automatically activates its most recent routine.
+  - Deleting a semester with routines asks for confirmation.
+- **Routine management** within each semester:
+  - Create, **rename**, switch, move to another semester, or delete routines.
+  - Renaming a routine never changes its `is_active` state or `term_id`.
+  - The last routine in a semester cannot be deleted.
+- **Term-wide attendance reporting**: The PDF report and subject list aggregate attendance across all routines in the active semester, using `origin_subject_id` to group copies of the same subject across routines.
 - **Dynamic Weekly Timetable**:
   - Configure recurring classes by weekday (Monday–Saturday).
-  - Routine is intentionally Monday–Saturday only; Sunday is excluded and will not become a recurring routine day.
+  - Routine is intentionally Monday–Saturday only; Sunday is excluded.
   - Slot by period number, start time, end time.
   - Per-slot teacher override — different faculty for the same subject on different days is fully supported.
   - Conflict prevention and unique indexing over `(user_id, semester_id, day_of_week, period_number)`.
-- **Manage periods from the subject page**: Add, edit, or delete individual period slots directly from the subject detail view — no need to navigate to the Routine tab.
-- **Class Timetable Sharing**: Generate a unique invite link or QR code to share your entire class routine (semester, subjects, and periods) with classmates. They can import it with one tap to instantly set up their own Rollbook.
-- **Routine Archiving**: When the college changes the schedule mid-semester, use _Archive routine & start fresh_ to:
-  - Mark the current semester as archived (attendance history preserved).
-  - Create a new active semester with all subjects copied over (codes, teachers, and notes intact).
-  - Start with a blank timetable and add the updated periods.
+- **Manage periods from the subject page**: Add, edit, or delete individual period slots directly from the subject detail view.
+- **Class Timetable Sharing**: Generate a unique invite link or QR code to share your entire class routine with classmates. They can import it with one tap to instantly set up their own Rollbook.
 - **Active / Closed Semesters**: Archive past semesters while retaining all historical attendance data.
 
 ### 3. Intelligent Attendance & Bunk Intelligence
@@ -106,6 +114,7 @@
 
 ### 5. Visual Analytics & Calendar
 - **Interactive Calendar View**: Month-by-month grid displaying daily attendance states.
+- **Future Date View**: Selecting a future date on the calendar shows that day's scheduled classes from the weekly routine in read-only mode (no marking allowed) — useful for planning ahead.
 - **Subject-Specific Deep Dives**: Click any subject card to open a full detail view showing:
   - Subject code, all assigned teachers (default + per-slot overrides), and optional description/notes.
   - **Class schedule** grouped by day — every period listed with its time range and teacher, with inline edit and delete.
@@ -113,7 +122,7 @@
   - Cumulative attendance percentage with bunk / recovery metrics.
   - Full colour-coded attendance history (present / absent / not held).
   - List of assigned teacher credits.
-- **Per-subject completion toggle**: Mark individual subjects as "no more classes" — directly on the subject list card or inside the detail page — without closing the whole semester. Completed subjects are visually dimmed with a strikethrough.
+- **Per-subject completion toggle**: Mark individual subjects as "no more classes" without closing the whole semester. Completed subjects are visually dimmed with a strikethrough.
 
 ### 6. Extracurricular Participation Tracking
 - **Activity Log**: Keep a dated log of workshops, fests, games, and other events you took part in.
@@ -126,12 +135,12 @@
 ### 8. Data Portability & Settings
 - **Attendance Summary PDF Export**: Generate a clean, printable monthly or semester attendance report for official college submissions or parent meetings directly from the settings page.
 - **JSON Snapshot Export**: Download complete user data (profile, semesters, timetable, marks, credits) in one portable JSON file. Avatar images are stored separately in the database and are not included in the export.
-- **Snapshot Import / Restore**: Seamless migration across browsers or test devices without data loss. The import validator accepts the current schema and gracefully handles older exports that predate the `description` field on subjects.
+- **Snapshot Import / Restore**: Seamless migration across browsers or test devices without data loss.
 - **Locked Profile View**: Profile details are safely locked in read-only mode to prevent accidental modifications. You must explicitly click the "Edit" button to change your details.
-- **Profile & Threshold Configuration**: Adjust student ID, college name, and target attendance percentage on the fly.
-- **Social Links**: Connect with the developer via GitHub, LinkedIn, Twitter, and Email directly from the settings page.
-- **Profile Picture**: Upload a photo (max 50 KB) from the Settings → Profile section. The image is stored in the database and served via `/api/avatar` with a 24-hour browser cache — downloaded once, served from disk cache on every subsequent load.
-- **PWA Install Prompt**: When the browser supports it, a non-intrusive banner offers to add Rollbook to the home screen for standalone, offline-ready access. The prompt is suppressed once the app is already installed or the user dismisses it.
+- **Profile & Threshold Configuration**: Adjust student ID, college name, session/year, and target attendance percentage on the fly.
+- **Social Links**: Connect with the developer via GitHub, LinkedIn, Twitter, and personal website directly from the settings page.
+- **Profile Picture**: Upload a photo (max 50 KB) from Settings → Profile. The image is stored in the database and served via `/api/avatar` with a 24-hour browser cache.
+- **PWA Install Prompt**: When the browser supports it, a non-intrusive banner offers to add Rollbook to the home screen for standalone, offline-ready access.
 
 ### 9. Notifications & Smart Alerts
 - **Welcome Email**: New users automatically receive a customized welcome email on registration via Resend.
@@ -180,14 +189,18 @@
 
 ```
 Rollbook/
-├── migrations/                     # SQL migration files
+├── migrations/                     # SQL migration files (applied in order)
 │   ├── 0001_auth.sql              # Better Auth tables
-│   ├── 0002_rollbook.sql          # Rollbook entities (profiles, semesters, etc.)
-│   ├── 0003_subject_description.sql # Adds description column to subjects
-│   ├── 0004_avatar.sql            # Adds avatar_data column to profiles
-│   ├── 0005_activities.sql        # Activities and events logging
-│   ├── 0007_holidays.sql          # Holiday ranges and pauses
-│   ├── 0008_shared_routines.sql   # Class timetable sharing payloads
+│   ├── 0002_rollbook.sql          # Core entities (profiles, semesters, subjects, periods, attendance)
+│   ├── 0003_subject_description.sql
+│   ├── 0004_avatar.sql
+│   ├── 0005_activities.sql
+│   ├── 0007_holidays.sql
+│   ├── 0008_shared_routines.sql
+│   ├── 0010_account_deletion_and_archive.sql
+│   ├── 0011_profile_timezone.sql
+│   ├── 0012_terms_and_session.sql  # Terms table, term_id on semesters, origin_subject_id, session
+│   ├── 0013_term_classes_over_and_backfill.sql # classes_over on terms, backfill term_id
 │   └── auth/                      # Upstream auth definitions
 ├── public/                         # Static assets, PWA icons, manifest, sw.js
 ├── scripts/                        # Database migration, preview & test runners
@@ -213,9 +226,12 @@ Rollbook/
 │   │   ├── idb.ts                 # IndexedDB wrapper for offline queue
 │   │   └── rollbook/              # Core business logic
 │   │       ├── api.ts             # Server functions (RPC endpoints)
-│   │       ├── derive.ts          # Snapshot subject & semester aggregations
+│   │       ├── derive.ts          # Snapshot aggregations (per-subject & term-wide)
+│   │       ├── queries.ts         # React Query hooks & mutation cache management
 │   │       ├── stats.ts           # Bunk, recovery, and percentage calculations
-│   │       └── types.ts           # Domain models & TypeScript interfaces
+│   │       ├── types.ts           # Domain models & TypeScript interfaces
+│   │       ├── api-logic.test.ts  # Unit tests: Zod schema & field-mask logic
+│   │       └── upsert-pglite.test.ts # Integration tests: upsert SQL vs PGLite
 │   ├── routes/                    # TanStack file-based router pages
 │   │   ├── __root.tsx             # Root layout with QueryClient & Toasters
 │   │   ├── index.tsx              # Main dashboard (Today's classes & quick mark)
@@ -223,10 +239,10 @@ Rollbook/
 │   │   ├── subjects.tsx           # Subject list & aggregation
 │   │   ├── subjects.$subjectId.tsx# Subject detailed breakdown
 │   │   ├── timetable.tsx          # Weekly schedule editor
-│   │   ├── calendar.tsx           # Monthly attendance log
-│   │   ├── report.tsx             # Printable PDF attendance summary
+│   │   ├── calendar.tsx           # Monthly attendance log (future dates: read-only view)
+│   │   ├── report.tsx             # Printable PDF attendance summary (term-wide)
 │   │   ├── invite.$inviteId.tsx   # Timetable sharing import landing page
-│   │   ├── settings.tsx           # Profile settings, threshold, data import/export
+│   │   ├── settings.tsx           # Profile, semesters, routines, data import/export
 │   │   ├── api/auth/$.ts          # Better Auth HTTP handler catch-all
 │   │   └── api/sync.ts            # Background sync endpoint for offline queue
 │   ├── router.tsx                 # Router instance creation
@@ -257,7 +273,7 @@ Rollbook/
 ### Dual-Mode Database Engine (PGLite & Neon)
 
 Rollbook implements an isomorphic `getSql()` interface in `src/lib/db.ts`:
-- **When `DATABASE_URL` is unset**: Instantiates `@electric-sql/pglite` in WebAssembly with in-memory persistence. Runs migrations automatically via `import.meta.glob('/migrations/*.sql')` inside the browser/sandbox.
+- **When `DATABASE_URL` is unset**: Instantiates `@electric-sql/pglite` in WebAssembly with in-memory persistence. Runs migrations automatically via `import.meta.glob('/migrations/*.sql')`.
 - **When `DATABASE_URL` is set**: Connects to Neon Serverless PostgreSQL using `pg.Pool` with connection pooling and normalized parser types (`int8 -> number`, `date -> YYYY-MM-DD string`).
 
 ### Data Model & Entities
@@ -270,24 +286,39 @@ CREATE TABLE profiles (
   student_id TEXT NOT NULL,
   college_name TEXT NOT NULL,
   threshold_percent INTEGER NOT NULL DEFAULT 75,
-  avatar_data TEXT,                      -- base64 data-URL ≤ 50 KB; served via /api/avatar
+  avatar_data TEXT,                      -- base64 data-URL ≤ 50 KB
+  session TEXT,                          -- e.g. "2025-26" (academic year label)
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 2. Semesters
+-- 2. Terms (Semesters — the top-level academic period grouping)
+CREATE TABLE terms (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL,                    -- e.g. "Odd Semester 2025-26"
+  session TEXT,                          -- e.g. "2025-26"
+  start_date DATE,
+  end_date DATE,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  classes_over BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 3. Routines (Semesters — the weekly timetable, nested inside a Term)
 CREATE TABLE semesters (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
+  term_id TEXT REFERENCES terms(id) ON DELETE SET NULL,  -- parent semester/term
   course_name TEXT NOT NULL,
-  semester_name TEXT NOT NULL,
+  semester_name TEXT NOT NULL,           -- the routine's display name
   start_date DATE,
   is_active BOOLEAN NOT NULL DEFAULT true,
   classes_over BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 3. Subjects
+-- 4. Subjects
 CREATE TABLE subjects (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -295,18 +326,19 @@ CREATE TABLE subjects (
   name TEXT NOT NULL,
   code TEXT,
   default_teacher TEXT,
-  description TEXT,                      -- optional notes, room, syllabus, multiple teachers
+  description TEXT,
+  origin_subject_id TEXT REFERENCES subjects(id) ON DELETE SET NULL, -- links copies across routines
   closed BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 4. Timetable Periods
+-- 5. Timetable Periods
 CREATE TABLE periods (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
   semester_id TEXT NOT NULL REFERENCES semesters(id) ON DELETE CASCADE,
   subject_id TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
-  day_of_week INTEGER NOT NULL,          -- 0 (Sun) to 6 (Sat)
+  day_of_week INTEGER NOT NULL,          -- 1 (Mon) to 6 (Sat); 0 (Sun) excluded
   period_number INTEGER NOT NULL,
   start_time TEXT NOT NULL,
   end_time TEXT NOT NULL,
@@ -315,7 +347,7 @@ CREATE TABLE periods (
   UNIQUE (user_id, semester_id, day_of_week, period_number)
 );
 
--- 5. Daily Attendance Logs
+-- 6. Daily Attendance Logs
 CREATE TABLE attendance (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -325,7 +357,7 @@ CREATE TABLE attendance (
   UNIQUE (user_id, period_id, date)
 );
 
--- 6. Teacher Credit Grants
+-- 7. Teacher Credit Grants
 CREATE TABLE credit_grants (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -338,7 +370,7 @@ CREATE TABLE credit_grants (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 7. Activities (Extracurricular Participation)
+-- 8. Activities (Extracurricular Participation)
 CREATE TABLE activities (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -352,7 +384,7 @@ CREATE TABLE activities (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 8. Holidays (Exam / Vacation Mode)
+-- 9. Holidays (Exam / Vacation Mode)
 CREATE TABLE holidays (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -362,7 +394,7 @@ CREATE TABLE holidays (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 9. Shared Routines (Timetable Invites)
+-- 10. Shared Routines (Timetable Invites)
 CREATE TABLE shared_routines (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -464,7 +496,7 @@ npm run dev
 - `npm run dev`: Starts Vite dev server on port 8080 with environment loader.
 - `npm run build`: Compiles client & server assets with Vite, runs database migrations.
 - `npm run db:migrate`: Executes pending migrations in `migrations/` against configured database.
-- `npm run test`: Executes unit tests for calculation algorithms, readiness schedules, and auth guards.
+- `npm run test`: Runs unit tests (Zod schemas, bunk algorithms, auth guards) and PGLite integration tests for the upsert functions.
 - `npm run typecheck`: Runs `tsc --noEmit` across TypeScript sources.
 - `npm run lint`: Checks styling and code smells with ESLint.
 
@@ -478,6 +510,9 @@ Rollbook is designed for frictionless zero-config deployment on **Vercel** or an
 2. **Environment Variables**: Add `DATABASE_URL` pointing to your [Neon](https://neon.tech) PostgreSQL instance (always use the pooled connection string containing `-pooler` in the hostname to avoid connection exhaustion on serverless), set `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `VITE_AUTH_ENABLED=true`, and `RESEND_API_KEY` for password reset emails. See `.env.example` for the full list.
 3. **Build Command**: The default build script (`npm run build`) automatically applies all SQL migrations before completing deployment.
 
+---
+
 ### Author
 
-Mritunjay Kumar Pandey
+**Mritunjay Kumar Pandey**
+🌐 [mritunjaylive.in](https://mritunjaylive.in)
