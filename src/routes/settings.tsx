@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
+  ArrowRightLeft,
   Bell,
   Camera,
   Github,
@@ -25,8 +26,7 @@ import { ProfileAvatar } from "@/components/profile-avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
-import { Field, Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
+import { Field, Input, Select } from "@/components/ui/input";
 import { authEnabled, signOut } from "@/lib/auth/client";
 import { hasGateSessionMarker } from "@/lib/auth/gate-session-marker";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
@@ -35,8 +35,9 @@ import {
   uploadAvatar,
   removeAvatar,
 } from "@/lib/use-profile-avatar";
-import { selectActive, useRollbookMutations, useSnapshot } from "@/lib/rollbook/queries";
-import type { Profile } from "@/lib/rollbook/types";
+import { selectActive, selectActiveTerm, useRollbookMutations, useSnapshot } from "@/lib/rollbook/queries";
+import { isValidSession } from "@/lib/rollbook/api";
+import type { Profile, Semester, Term } from "@/lib/rollbook/types";
 import { localISODate } from "@/lib/utils";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
@@ -54,10 +55,15 @@ function SettingsPage() {
   const mut = useRollbookMutations();
   const fileRef = useRef<HTMLInputElement>(null);
   const [semOpen, setSemOpen] = useState(false);
+  const [termOpen, setTermOpen] = useState(false);
   const [holidayOpen, setHolidayOpen] = useState(false);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [moveRoutineTarget, setMoveRoutineTarget] = useState<Semester | null>(null);
+  const [renamingTerm, setRenamingTerm] = useState<Term | null>(null);
+  const [renamingRoutine, setRenamingRoutine] = useState<Semester | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const profile = snapshot?.profile;
+  const activeTerm = selectActiveTerm(snapshot);
 
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   useEffect(() => {
@@ -91,6 +97,7 @@ function SettingsPage() {
             {
               version: 1 as const,
               profile: fullSnapshot.profile,
+              terms: fullSnapshot.terms,
               semesters: fullSnapshot.semesters,
               subjects: fullSnapshot.subjects,
               periods: fullSnapshot.periods,
@@ -215,48 +222,263 @@ function SettingsPage() {
 
       <section className="mt-8">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="font-display text-xl font-semibold">Semesters</h2>
-          <Button size="sm" variant="secondary" onClick={() => setSemOpen(true)}>
-            New
-          </Button>
+          <h2 className="font-display text-xl font-semibold">Semesters &amp; Routines</h2>
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setTermOpen(true)}>
+              New Term
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setSemOpen(true)}>
+              New Routine
+            </Button>
+          </div>
         </div>
-        <ul className="mt-3 space-y-2">
-          {snapshot?.semesters.map((s) => (
-            <li key={s.id}>
-              <Card className="flex items-center justify-between gap-3 p-3">
-                <div>
-                  <p className="font-medium">
-                    {s.semesterName}
-                    {s.isActive ? (
-                      <span className="ml-2 rounded-full bg-accent/15 px-2 py-0.5 text-xs font-semibold text-accent">
-                        active
-                      </span>
+        <p className="mt-1 text-sm text-ink-soft">
+          A <strong>Term</strong> is the academic semester grouping (e.g. &ldquo;Odd Semester 2025-26&rdquo;).
+          A <strong>Routine</strong> is a concrete timetable inside a term — use &ldquo;Archive &amp; start fresh&rdquo; to roll over to a new routine within the same term.
+        </p>
+
+        {/* Term list */}
+        {snapshot?.terms && snapshot.terms.length > 0 ? (
+          <ul className="mt-3 space-y-4">
+            {snapshot.terms.map((term) => {
+              const termRoutines = snapshot.semesters.filter((s) => s.termId === term.id);
+              return (
+                <li key={term.id}>
+                  <Card className="p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-ink">
+                          {term.name}
+                          {term.isActive ? (
+                            <span className="ml-2 rounded-full bg-accent/15 px-2 py-0.5 text-xs font-semibold text-accent">
+                              active
+                            </span>
+                          ) : null}
+                          {term.classesOver ? (
+                            <span className="ml-2 rounded-full bg-line px-2 py-0.5 text-xs text-ink-faint">
+                              ended
+                            </span>
+                          ) : null}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title="Rename semester"
+                          onClick={() => setRenamingTerm(term)}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                        {!term.isActive ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => void mut.setActiveTerm.mutateAsync(term.id).catch((err) => toast.error(err instanceof Error ? err.message : "Could not switch semester."))}
+                          >
+                            Switch
+                          </Button>
+                        ) : null}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-warn hover:bg-warn-soft"
+                          title="Delete semester"
+                          onClick={async () => {
+                            if (termRoutines.length > 0) {
+                              if (
+                                confirm(
+                                  `This semester contains ${termRoutines.length} routine(s) (${termRoutines.map((r) => r.semesterName).join(", ")}). Deleting this semester will permanently delete all its routines, subjects, and attendance. Are you sure?`,
+                                )
+                              ) {
+                                await mut.deleteTerm.mutateAsync({ id: term.id, deleteRoutines: true });
+                                toast.success("Semester deleted.");
+                              }
+                            } else {
+                              if (confirm(`Delete semester "${term.name}"?`)) {
+                                await mut.deleteTerm.mutateAsync({ id: term.id });
+                                toast.success("Semester deleted.");
+                              }
+                            }
+                          }}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    {termRoutines.length > 0 ? (
+                      <ul className="mt-3 space-y-2 border-t border-line pt-3">
+                        {termRoutines.map((s) => (
+                          <li key={s.id} className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-medium text-ink">
+                                {s.semesterName}
+                                {s.isActive ? (
+                                  <span className="ml-2 rounded-full bg-accent/15 px-2 py-0.5 text-xs font-semibold text-accent">
+                                    active
+                                  </span>
+                                ) : null}
+                                {s.classesOver ? (
+                                  <span className="ml-2 rounded-full bg-line px-2 py-0.5 text-xs text-ink-faint">
+                                    archived
+                                  </span>
+                                ) : null}
+                              </p>
+                              <p className="text-xs text-ink-faint">
+                                {s.courseName}{s.startDate ? ` · started ${s.startDate}` : ""}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                title="Rename routine"
+                                onClick={() => setRenamingRoutine(s)}
+                              >
+                                <Pencil className="size-3.5" />
+                              </Button>
+                              {!s.isActive ? (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => void mut.setActiveSemester.mutateAsync(s.id)}
+                                >
+                                  Switch
+                                </Button>
+                              ) : null}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                title="Move to another semester"
+                                onClick={() => setMoveRoutineTarget(s)}
+                              >
+                                <ArrowRightLeft className="mr-1 size-3.5" />
+                                Move
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="text-warn hover:bg-warn-soft"
+                                title="Delete routine"
+                                onClick={async () => {
+                                  if (
+                                    !confirm(
+                                      `Delete routine "${s.semesterName}"? All its periods and attendance records will be removed.`,
+                                    )
+                                  ) {
+                                    return;
+                                  }
+                                  try {
+                                    await mut.deleteSemester.mutateAsync(s.id);
+                                    toast.success("Routine deleted.");
+                                  } catch (err) {
+                                    toast.error(err instanceof Error ? err.message : "Could not delete routine.");
+                                  }
+                                }}
+                              >
+                                <Trash2 className="size-4" />
+                              </Button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
                     ) : null}
-                    {s.classesOver ? (
-                      <span className="ml-2 rounded-full bg-line px-2 py-0.5 text-xs text-ink-faint">
-                        archived
-                      </span>
-                    ) : null}
-                  </p>
-                  <p className="text-xs text-ink-faint">
-                    {s.courseName}
-                    {s.startDate ? ` · started ${s.startDate}` : ""}
-                  </p>
-                </div>
-                {!s.isActive ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => void mut.setActiveSemester.mutateAsync(s.id)}
-                  >
-                    Switch
-                  </Button>
-                ) : null}
-              </Card>
-            </li>
-          ))}
-        </ul>
-        {active.semester ? (
+                  </Card>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+
+        {/* Unlinked routines (legacy rows without a term) */}
+        {snapshot?.semesters.filter((s) => !s.termId).length ? (
+          <>
+            {snapshot.terms.length > 0 ? (
+              <p className="mt-3 text-xs text-ink-faint">Routines not linked to a semester:</p>
+            ) : null}
+            <ul className="mt-2 space-y-2">
+              {snapshot.semesters
+                .filter((s) => !s.termId)
+                .map((s) => (
+                  <li key={s.id}>
+                    <Card className="flex items-center justify-between gap-3 p-3">
+                      <div>
+                        <p className="font-medium">
+                          {s.semesterName}
+                          {s.isActive ? (
+                            <span className="ml-2 rounded-full bg-accent/15 px-2 py-0.5 text-xs font-semibold text-accent">
+                              active
+                            </span>
+                          ) : null}
+                          {s.classesOver ? (
+                            <span className="ml-2 rounded-full bg-line px-2 py-0.5 text-xs text-ink-faint">
+                              archived
+                            </span>
+                          ) : null}
+                        </p>
+                        <p className="text-xs text-ink-faint">
+                          {s.courseName}{s.startDate ? ` · started ${s.startDate}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {!s.isActive ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => void mut.setActiveSemester.mutateAsync(s.id)}
+                          >
+                            Switch
+                          </Button>
+                        ) : null}
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setMoveRoutineTarget(s)}
+                        >
+                          <ArrowRightLeft className="mr-1 size-3.5" />
+                          Attach to semester
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-warn hover:bg-warn-soft"
+                          title="Delete routine"
+                          onClick={async () => {
+                            if (
+                              confirm(
+                                `Delete routine "${s.semesterName}"? All its periods and attendance records will be removed.`,
+                              )
+                            ) {
+                              await mut.deleteSemester.mutateAsync(s.id);
+                              toast.success("Routine deleted.");
+                            }
+                          }}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    </Card>
+                  </li>
+                ))}
+            </ul>
+          </>
+        ) : null}
+
+        {active.term ? (
+          <label className="mt-4 flex min-h-11 items-center gap-3 text-sm">
+            <input
+              type="checkbox"
+              checked={active.term.classesOver}
+              onChange={(e) =>
+                void mut.setTermClassesOver.mutateAsync({
+                  id: active.term!.id,
+                  classesOver: e.target.checked,
+                })
+              }
+            />
+            No more classes this semester
+          </label>
+        ) : active.semester ? (
           <label className="mt-4 flex min-h-11 items-center gap-3 text-sm">
             <input
               type="checkbox"
@@ -542,9 +764,26 @@ function SettingsPage() {
         </Card>
       </section>
 
-      <NewSemesterDialog open={semOpen} onOpenChange={setSemOpen} />
+      <NewTermDialog open={termOpen} onOpenChange={setTermOpen} />
+      <NewSemesterDialog open={semOpen} onOpenChange={setSemOpen} snapshot={snapshot} />
       <NewHolidayDialog open={holidayOpen} onOpenChange={setHolidayOpen} />
       <DeleteAccountDialog open={deleteAccountOpen} onOpenChange={setDeleteAccountOpen} />
+      <MoveRoutineDialog
+        routine={moveRoutineTarget}
+        terms={snapshot?.terms ?? []}
+        open={Boolean(moveRoutineTarget)}
+        onOpenChange={(v) => !v && setMoveRoutineTarget(null)}
+      />
+      <RenameTermDialog
+        term={renamingTerm}
+        open={Boolean(renamingTerm)}
+        onOpenChange={(v) => !v && setRenamingTerm(null)}
+      />
+      <RenameRoutineDialog
+        routine={renamingRoutine}
+        open={Boolean(renamingRoutine)}
+        onOpenChange={(v) => !v && setRenamingRoutine(null)}
+      />
     </AppShell>
   );
 }
@@ -636,12 +875,14 @@ function ProfileCard({
   const [studentId, setStudentId] = useState(profile.studentId);
   const [collegeName, setCollegeName] = useState(profile.collegeName);
   const [threshold, setThreshold] = useState(profile.thresholdPercent);
+  const [session, setSession] = useState(profile.session ?? "");
 
   function cancelEdit() {
     setStudentName(profile.studentName);
     setStudentId(profile.studentId);
     setCollegeName(profile.collegeName);
     setThreshold(profile.thresholdPercent);
+    setSession(profile.session ?? "");
     onEditingChange(false);
   }
 
@@ -673,12 +914,18 @@ function ProfileCard({
           className="mt-4 space-y-3"
           onSubmit={async (e) => {
             e.preventDefault();
+            const trimmedSession = session.trim();
+            if (trimmedSession && !isValidSession(trimmedSession)) {
+              toast.error("Session must be in format YYYY-YYYY or YYYY-YY (e.g. 2025-2027 or 2025-26).");
+              return;
+            }
             try {
               await mut.upsertProfile.mutateAsync({
                 studentName,
                 studentId,
                 collegeName,
                 thresholdPercent: threshold,
+                session: trimmedSession || null,
               });
               toast.success("Profile saved.");
               onEditingChange(false);
@@ -705,6 +952,13 @@ function ProfileCard({
               onChange={(e) => setThreshold(Number(e.target.value) || 75)}
             />
           </Field>
+          <Field label="Academic session / year">
+            <Input
+              value={session}
+              onChange={(e) => setSession(e.target.value)}
+              placeholder="2025-2027"
+            />
+          </Field>
           <Button type="submit" disabled={mut.upsertProfile.isPending}>
             {mut.upsertProfile.isPending ? "Saving…" : "Save profile"}
           </Button>
@@ -718,6 +972,9 @@ function ProfileCard({
             label="Attendance threshold"
             value={`${profile.thresholdPercent}%`}
           />
+          {profile.session ? (
+            <ReadRow label="Session" value={profile.session} />
+          ) : null}
         </dl>
       )}
     </Card>
@@ -733,7 +990,7 @@ function ReadRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function NewSemesterDialog({
+function NewTermDialog({
   open,
   onOpenChange,
 }: {
@@ -741,14 +998,136 @@ function NewSemesterDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const mut = useRollbookMutations();
+  const [name, setName] = useState("");
+  const [startDate, setStartDate] = useState(localISODate());
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title="New semester">
+      <p className="text-sm text-ink-soft">
+        A semester groups one or more routines (timetables), e.g. &ldquo;Odd Semester 2025-26&rdquo;.
+      </p>
+      <form
+        className="mt-3 space-y-3"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          await mut.upsertTerm.mutateAsync({
+            name,
+            startDate,
+            makeActive: true,
+          });
+          setName("");
+          onOpenChange(false);
+          toast.success("Semester created and set as active.");
+        }}
+      >
+        <Field label="Semester name">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            placeholder="e.g. Odd Semester 2025-26"
+          />
+        </Field>
+        <Field label="Started on">
+          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+        </Field>
+        <Button type="submit" className="w-full">
+          Create semester
+        </Button>
+      </form>
+    </Dialog>
+  );
+}
+
+function MoveRoutineDialog({
+  routine,
+  terms,
+  open,
+  onOpenChange,
+}: {
+  routine: Semester | null;
+  terms: Term[];
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const mut = useRollbookMutations();
+  const [targetTermId, setTargetTermId] = useState<string>("");
+
+  useEffect(() => {
+    if (routine) {
+      setTargetTermId(routine.termId ?? "unlinked");
+    }
+  }, [routine]);
+
+  if (!routine) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title="Move routine">
+      <p className="text-sm text-ink-soft">
+        Move routine <strong>{routine.semesterName}</strong> to another semester:
+      </p>
+      <form
+        className="mt-4 space-y-4"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const termId = targetTermId === "unlinked" ? null : targetTermId;
+          await mut.moveRoutineToTerm.mutateAsync({
+            routineId: routine.id,
+            termId,
+          });
+          toast.success("Routine moved successfully.");
+          onOpenChange(false);
+        }}
+      >
+        <Field label="Target semester">
+          <Select
+            value={targetTermId}
+            onChange={(e) => setTargetTermId(e.target.value)}
+          >
+            {terms.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name} {t.isActive ? "(active)" : ""}
+              </option>
+            ))}
+            <option value="unlinked">None (unlinked)</option>
+          </Select>
+        </Field>
+        <Button type="submit" className="w-full">
+          Move routine
+        </Button>
+      </form>
+    </Dialog>
+  );
+}
+
+function NewSemesterDialog({
+  open,
+  onOpenChange,
+  snapshot,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  snapshot: Parameters<typeof selectActiveTerm>[0];
+}) {
+  const mut = useRollbookMutations();
+  const activeTerm = selectActiveTerm(snapshot);
   const [courseName, setCourseName] = useState("");
   const [semesterName, setSemesterName] = useState("");
   const [startDate, setStartDate] = useState(localISODate());
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="New semester">
+    <Dialog open={open} onOpenChange={onOpenChange} title="New routine">
+      {activeTerm ? (
+        <p className="text-sm text-ink-soft">
+          This routine will be linked to the active term: <strong>{activeTerm.name}</strong>.
+        </p>
+      ) : (
+        <p className="text-sm text-ink-soft">
+          No active term — this routine will be unlinked. Create a term first if you want term-wide reporting.
+        </p>
+      )}
       <form
-        className="space-y-3"
+        className="mt-3 space-y-3"
         onSubmit={async (e) => {
           e.preventDefault();
           await mut.upsertSemester.mutateAsync({
@@ -756,18 +1135,19 @@ function NewSemesterDialog({
             semesterName,
             startDate,
             makeActive: true,
+            termId: activeTerm?.id ?? null,
           });
           setCourseName("");
           setSemesterName("");
           onOpenChange(false);
-          toast.success("Semester created.");
+          toast.success("Routine created.");
         }}
       >
         <Field label="Course">
           <Input value={courseName} onChange={(e) => setCourseName(e.target.value)} required />
         </Field>
-        <Field label="Semester">
-          <Input value={semesterName} onChange={(e) => setSemesterName(e.target.value)} required />
+        <Field label="Routine / Semester label">
+          <Input value={semesterName} onChange={(e) => setSemesterName(e.target.value)} required placeholder="e.g. Routine 1" />
         </Field>
         <Field label="Started on">
           <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
@@ -825,6 +1205,107 @@ function NewHolidayDialog({
         </Field>
         <Button type="submit" className="w-full">
           Save holiday
+        </Button>
+      </form>
+    </Dialog>
+  );
+}
+
+function RenameTermDialog({
+  term,
+  open,
+  onOpenChange,
+}: {
+  term: Term | null;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const mut = useRollbookMutations();
+  const [name, setName] = useState("");
+
+  useEffect(() => {
+    if (term) setName(term.name);
+  }, [term]);
+
+  if (!term) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title="Rename semester">
+      <form
+        className="mt-3 space-y-3"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          try {
+            await mut.upsertTerm.mutateAsync({ id: term.id, name });
+            toast.success("Semester renamed.");
+            onOpenChange(false);
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Could not rename.");
+          }
+        }}
+      >
+        <Field label="Semester name">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            placeholder="e.g. Odd Semester 2025-26"
+          />
+        </Field>
+        <Button type="submit" className="w-full" disabled={mut.upsertTerm.isPending}>
+          {mut.upsertTerm.isPending ? "Saving…" : "Save"}
+        </Button>
+      </form>
+    </Dialog>
+  );
+}
+
+function RenameRoutineDialog({
+  routine,
+  open,
+  onOpenChange,
+}: {
+  routine: Semester | null;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const mut = useRollbookMutations();
+  const [semesterName, setSemesterName] = useState("");
+
+  useEffect(() => {
+    if (routine) setSemesterName(routine.semesterName);
+  }, [routine]);
+
+  if (!routine) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title="Rename routine">
+      <form
+        className="mt-3 space-y-3"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          try {
+            await mut.upsertSemester.mutateAsync({
+              id: routine.id,
+              semesterName,
+            });
+            toast.success("Routine renamed.");
+            onOpenChange(false);
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Could not rename.");
+          }
+        }}
+      >
+        <Field label="Routine name">
+          <Input
+            value={semesterName}
+            onChange={(e) => setSemesterName(e.target.value)}
+            required
+            placeholder="e.g. Routine 2"
+          />
+        </Field>
+        <Button type="submit" className="w-full" disabled={mut.upsertSemester.isPending}>
+          {mut.upsertSemester.isPending ? "Saving…" : "Save"}
         </Button>
       </form>
     </Dialog>

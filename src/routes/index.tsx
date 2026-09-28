@@ -9,7 +9,7 @@ import { StatsLine } from "@/components/stats-line";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { weekdayName } from "@/lib/rollbook/days";
-import { statsForSemester, statsForSubject } from "@/lib/rollbook/derive";
+import { groupSubjectsByOrigin, statsForSubject, statsForSubjectGroup, statsForTerm } from "@/lib/rollbook/derive";
 import { projectedCredit } from "@/lib/rollbook/stats";
 import { selectActive, useRollbookMutations, useSnapshot } from "@/lib/rollbook/queries";
 import type { AttendanceStatus, AttendanceStats, Period, Subject } from "@/lib/rollbook/types";
@@ -43,14 +43,23 @@ function TodayPage() {
   const active = selectActive(snapshot);
   const threshold = snapshot?.profile?.thresholdPercent ?? 75;
   const overall =
-    snapshot && active.semester
-      ? statsForSemester(snapshot, active.semester.id, threshold)
+    snapshot && (active.term || active.semester)
+      ? statsForTerm(snapshot, active.term?.id ?? active.semester?.termId, threshold)
       : null;
+  const classesOver = Boolean(active.term?.classesOver ?? active.semester?.classesOver);
   const jsDay = today ? parseISODate(today).getDay() : null;
   const periodsToday = (jsDay && jsDay !== 0
     ? active.periods.filter((p) => p.dayOfWeek === jsDay)
     : []
   ).sort((a, b) => a.periodNumber - b.periodNumber || a.startTime.localeCompare(b.startTime));
+
+  const subjectGroups = snapshot ? Array.from(groupSubjectsByOrigin(snapshot).values()) : [];
+  const groupForSubject = new Map<string, Subject[]>();
+  for (const g of subjectGroups) {
+    for (const s of g) {
+      groupForSubject.set(s.id, g);
+    }
+  }
 
   if (!snapshot || !today) {
     return (
@@ -67,6 +76,10 @@ function TodayPage() {
   );
 
   async function mark(periodId: string, status: AttendanceStatus) {
+    if (classesOver) {
+      toast.error("Classes are over for this semester. Attendance marking is closed.");
+      return;
+    }
     try {
       await mut.markAttendance.mutateAsync({ periodId, date: todayIso, status });
     } catch (err) {
@@ -75,7 +88,7 @@ function TodayPage() {
   }
 
   async function markHoliday() {
-    if (periodsToday.length === 0) return;
+    if (classesOver || periodsToday.length === 0) return;
     try {
       await mut.markDayStatus.mutateAsync({
         date: todayIso,
@@ -89,8 +102,8 @@ function TodayPage() {
   }
 
   const closedBanner =
-    active.semester &&
-    (active.semester.classesOver || active.subjects.some((s) => s.closed)) &&
+    (active.term || active.semester) &&
+    (classesOver || active.subjects.some((s) => s.closed)) &&
     overall &&
     overall.creditNeeded > 0;
 
@@ -143,7 +156,7 @@ function TodayPage() {
       <section className="mt-8">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="font-display text-xl font-semibold">Today’s classes</h2>
-          {periodsToday.length > 0 ? (
+          {periodsToday.length > 0 && !classesOver ? (
             <Button size="sm" variant="ghost" onClick={() => void markHoliday()}>
               Whole day holiday
             </Button>
@@ -173,22 +186,27 @@ function TodayPage() {
           />
         ) : (
           <ul className="space-y-3">
-            {periodsToday.map((p) => (
-              <PeriodCard
-                key={p.id}
-                period={p}
-                subject={subjectMap.get(p.subjectId)}
-                status={markByPeriod.get(p.id) ?? null}
-                onMark={(s) => void mark(p.id, s)}
-                busy={mut.markAttendance.isPending}
-                threshold={threshold}
-                stats={
-                  subjectMap.get(p.subjectId)
-                    ? statsForSubject(snapshot, p.subjectId, threshold)
-                    : null
-                }
-              />
-            ))}
+            {periodsToday.map((p) => {
+              const sGroup = p.subjectId ? groupForSubject.get(p.subjectId) : null;
+              const pStats = sGroup
+                ? statsForSubjectGroup(snapshot, sGroup, threshold)
+                : subjectMap.get(p.subjectId)
+                  ? statsForSubject(snapshot, p.subjectId, threshold)
+                  : null;
+              return (
+                <PeriodCard
+                  key={p.id}
+                  period={p}
+                  subject={subjectMap.get(p.subjectId)}
+                  status={markByPeriod.get(p.id) ?? null}
+                  onMark={(s) => void mark(p.id, s)}
+                  busy={mut.markAttendance.isPending}
+                  threshold={threshold}
+                  stats={pStats}
+                  classesOver={classesOver}
+                />
+              );
+            })}
           </ul>
         )}
       </section>
@@ -203,7 +221,10 @@ function TodayPage() {
           </div>
           <ul className="grid gap-3 sm:grid-cols-2">
             {active.subjects.map((s) => {
-              const st = statsForSubject(snapshot, s.id, threshold);
+              const sGroup = groupForSubject.get(s.id);
+              const st = sGroup
+                ? statsForSubjectGroup(snapshot, sGroup, threshold)
+                : statsForSubject(snapshot, s.id, threshold);
               return (
                 <li key={s.id}>
                   <Link
@@ -252,6 +273,7 @@ function PeriodCard({
   busy,
   threshold,
   stats,
+  classesOver,
 }: {
   period: Period;
   subject?: Subject;
@@ -260,6 +282,7 @@ function PeriodCard({
   busy?: boolean;
   threshold: number;
   stats: AttendanceStats | null;
+  classesOver?: boolean;
 }) {
   const nextPresent = stats ? projectedCredit(stats, "present", threshold) : null;
   const nextAbsent = stats ? projectedCredit(stats, "absent", threshold) : null;
@@ -277,7 +300,11 @@ function PeriodCard({
           {period.teacherName || subject?.defaultTeacher || "No teacher set"}
         </p>
       </div>
-      <MarkPad value={status} onChange={onMark} disabled={busy || subject?.closed} />
+      <MarkPad
+        value={status}
+        onChange={onMark}
+        disabled={busy || subject?.closed || classesOver}
+      />
       {stats && stats.creditNeeded > 0 && nextPresent !== null && nextAbsent !== null ? (
         <p className="mt-2 text-xs text-ink-faint">
           Attend → credit {nextPresent} · Miss → credit {nextAbsent}

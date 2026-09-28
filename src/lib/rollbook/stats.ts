@@ -1,4 +1,4 @@
-import type { AttendanceEntry, AttendanceStats, AttendanceStatus, CreditGrant } from "./types";
+import type { AttendanceEntry, AttendanceStats, AttendanceStatus, CreditGrant } from "./types.ts";
 
 export function computeStats(
   present: number,

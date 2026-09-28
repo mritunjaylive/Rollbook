@@ -78,3 +78,49 @@ test("buildCsv formats header and data rows correctly with CRLF", () => {
     '"Algorithms & ""Analysis""",,Prof. Knuth,10,6,4,0,1,0,60.0,60.0,2',
   );
 });
+
+test("buildCsv handles term-wide subject groups and period-level teachers", () => {
+  const rows: CsvReportRow[] = [
+    {
+      name: "Visual Programming",
+      code: "BCA401",
+      teachers: "Prof. VP Teacher",
+      held: 1,
+      present: 1,
+      absent: 0,
+      holiday: 0,
+      cancelled: 0,
+      teacherCredit: 0,
+      rawPercent: 100.0,
+      effectivePercent: 100.0,
+      creditNeeded: 0,
+    },
+    {
+      name: "E-Commerce",
+      code: "BCA402",
+      teachers: "Prof. EC Period Teacher",
+      held: 1,
+      present: 1,
+      absent: 0,
+      holiday: 0,
+      cancelled: 0,
+      teacherCredit: 0,
+      rawPercent: 100.0,
+      effectivePercent: 100.0,
+      creditNeeded: 0,
+    },
+  ];
+
+  const csv = buildCsv(rows);
+  const lines = csv.split("\r\n");
+
+  assert.equal(lines.length, 3);
+  assert.equal(
+    lines[1],
+    "Visual Programming,BCA401,Prof. VP Teacher,1,1,0,0,0,0,100.0,100.0,0",
+  );
+  assert.equal(
+    lines[2],
+    "E-Commerce,BCA402,Prof. EC Period Teacher,1,1,0,0,0,0,100.0,100.0,0",
+  );
+});

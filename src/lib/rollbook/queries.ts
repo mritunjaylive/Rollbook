@@ -28,16 +28,41 @@ export function useSnapshot() {
 export function selectActive(snapshot: Snapshot | undefined) {
   if (!snapshot) {
     return {
+      term: null,
+      routines: [],
       semester: null,
       subjects: [],
       periods: [],
       attendance: [],
       credits: [],
+      termSubjects: [],
+      termPeriods: [],
+      termAttendance: [],
+      termCredits: [],
       activities: [],
     };
   }
   const semester =
     snapshot.semesters.find((s) => s.isActive) ?? snapshot.semesters[0] ?? null;
+  const term = semester?.termId
+    ? (snapshot.terms.find((t) => t.id === semester.termId) ?? null)
+    : (snapshot.terms.find((t) => t.isActive) ?? snapshot.terms[0] ?? null);
+
+  const routines = term
+    ? snapshot.semesters.filter((s) => s.termId === term.id)
+    : snapshot.semesters.filter((s) => !s.termId);
+  const termRoutinesList = routines.length > 0 ? routines : (semester ? [semester] : []);
+
+  // Term-wide arrays across all routines in this term
+  const termSemIds = new Set(termRoutinesList.map((r) => r.id));
+  const termSubjects = snapshot.subjects.filter((s) => termSemIds.has(s.semesterId));
+  const termPeriods = snapshot.periods.filter((p) => termSemIds.has(p.semesterId));
+  const termPeriodIds = new Set(termPeriods.map((p) => p.id));
+  const termSubjectIds = new Set(termSubjects.map((s) => s.id));
+  const termAttendance = snapshot.attendance.filter((a) => termPeriodIds.has(a.periodId));
+  const termCredits = snapshot.credits.filter((c) => termSubjectIds.has(c.subjectId));
+
+  // Scoped to ACTIVE ROUTINE
   const subjects = semester
     ? snapshot.subjects.filter((s) => s.semesterId === semester.id)
     : [];
@@ -46,14 +71,29 @@ export function selectActive(snapshot: Snapshot | undefined) {
     : [];
   const subjectIds = new Set(subjects.map((s) => s.id));
   const periodIds = new Set(periods.map((p) => p.id));
+  const attendance = snapshot.attendance.filter((a) => periodIds.has(a.periodId));
+  const credits = snapshot.credits.filter((c) => subjectIds.has(c.subjectId));
+
   return {
+    term,
+    routines: termRoutinesList,
     semester,
     subjects,
     periods,
-    attendance: snapshot.attendance.filter((a) => periodIds.has(a.periodId)),
-    credits: snapshot.credits.filter((c) => subjectIds.has(c.subjectId)),
+    attendance,
+    credits,
+    termSubjects,
+    termPeriods,
+    termAttendance,
+    termCredits,
     activities: snapshot.activities,
   };
+}
+
+/** Returns the active term (if any) from the snapshot. */
+export function selectActiveTerm(snapshot: Snapshot | undefined) {
+  if (!snapshot) return null;
+  return snapshot.terms.find((t) => t.isActive) ?? snapshot.terms[0] ?? null;
 }
 
 export function useInvalidateSnapshot() {
@@ -72,6 +112,7 @@ export function useRollbookMutations() {
       collegeName: string;
       thresholdPercent?: number;
       timezone?: string | null;
+      session?: string | null;
     }) => api.upsertProfile({ data }),
     onSuccess: () => invalidate(),
   });
@@ -85,7 +126,8 @@ export function useRollbookMutations() {
   const upsertSemester = useMutation({
     mutationFn: (data: {
       id?: string;
-      courseName: string;
+      termId?: string | null;
+      courseName?: string;
       semesterName: string;
       startDate?: string | null;
       makeActive?: boolean;
@@ -149,6 +191,7 @@ export function useRollbookMutations() {
                   defaultTeacher: newData.defaultTeacher ?? null,
                   description: newData.description ?? null,
                   closed: false,
+                  originSubjectId: null,
                 },
               ],
             };
@@ -552,8 +595,49 @@ export function useRollbookMutations() {
   });
 
   const archiveRoutine = useMutation({
-    mutationFn: (data: { semesterId: string; newSemesterName: string }) =>
+    mutationFn: (data: { semesterId: string; newSemesterName: string; termId?: string | null }) =>
       api.archiveRoutine({ data }),
+    onSuccess: () => invalidate(),
+  });
+
+  const upsertTerm = useMutation({
+    mutationFn: (data: {
+      id?: string;
+      name: string;
+      startDate?: string | null;
+      endDate?: string | null;
+      makeActive?: boolean;
+    }) => api.upsertTerm({ data }),
+    onSuccess: () => invalidate(),
+  });
+
+  const setTermClassesOver = useMutation({
+    mutationFn: (data: { id: string; classesOver: boolean }) =>
+      api.setTermClassesOver({ data }),
+    onSuccess: () => invalidate(),
+  });
+
+  const moveRoutineToTerm = useMutation({
+    mutationFn: (data: { routineId: string; termId: string | null }) =>
+      api.moveRoutineToTerm({ data }),
+    onSuccess: () => invalidate(),
+  });
+
+  const deleteSemester = useMutation({
+    mutationFn: (id: string) => api.deleteSemester({ data: { id } }),
+    onSuccess: () => invalidate(),
+  });
+
+  const deleteTerm = useMutation({
+    mutationFn: (data: { id: string; deleteRoutines?: boolean } | string) => {
+      const payload = typeof data === "string" ? { id: data } : data;
+      return api.deleteTerm({ data: payload });
+    },
+    onSuccess: () => invalidate(),
+  });
+
+  const setActiveTerm = useMutation({
+    mutationFn: (id: string) => api.setActiveTerm({ data: { id } }),
     onSuccess: () => invalidate(),
   });
 
@@ -595,9 +679,15 @@ export function useRollbookMutations() {
   return {
     upsertProfile,
     updateTimezone,
+    upsertTerm,
+    setTermClassesOver,
+    deleteTerm,
+    setActiveTerm,
     upsertSemester,
     setActiveSemester,
     setSemesterClassesOver,
+    moveRoutineToTerm,
+    deleteSemester,
     upsertSubject,
     setSubjectClosed,
     deleteSubject,

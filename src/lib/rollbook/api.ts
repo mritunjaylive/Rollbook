@@ -16,6 +16,7 @@ import type {
   Semester,
   Snapshot,
   Subject,
+  Term,
 } from "./types";
 
 const statusSchema = z.enum(["present", "absent", "holiday", "cancelled"]);
@@ -28,12 +29,22 @@ type ProfileRow = {
   college_name: string;
   threshold_percent: number;
   timezone: string | null;
+  session: string | null;
   has_avatar: boolean;
   deletion_requested_at: string | null;
   scheduled_deletion_date: string | null;
 };
+type TermRow = {
+  id: string;
+  name: string;
+  start_date: string | null;
+  end_date: string | null;
+  is_active: boolean;
+  classes_over: boolean;
+};
 type SemesterRow = {
   id: string;
+  term_id: string | null;
   course_name: string;
   semester_name: string;
   start_date: string | null;
@@ -48,6 +59,7 @@ type SubjectRow = {
   default_teacher: string | null;
   description: string | null;
   closed: boolean;
+  origin_subject_id: string | null;
 };
 type PeriodRow = {
   id: string;
@@ -98,14 +110,26 @@ function mapProfile(r: ProfileRow): Profile {
     collegeName: r.college_name,
     thresholdPercent: Number(r.threshold_percent),
     timezone: r.timezone ?? null,
+    session: r.session ?? null,
     hasAvatar: Boolean(r.has_avatar),
     deletionRequestedAt: r.deletion_requested_at,
     scheduledDeletionDate: r.scheduled_deletion_date,
   };
 }
+function mapTerm(r: TermRow): Term {
+  return {
+    id: r.id,
+    name: r.name,
+    startDate: r.start_date,
+    endDate: r.end_date,
+    isActive: Boolean(r.is_active),
+    classesOver: Boolean(r.classes_over),
+  };
+}
 function mapSemester(r: SemesterRow): Semester {
   return {
     id: r.id,
+    termId: r.term_id ?? null,
     courseName: r.course_name,
     semesterName: r.semester_name,
     startDate: r.start_date,
@@ -122,6 +146,7 @@ function mapSubject(r: SubjectRow): Subject {
     defaultTeacher: r.default_teacher,
     description: r.description,
     closed: Boolean(r.closed),
+    originSubjectId: r.origin_subject_id ?? null,
   };
 }
 function mapPeriod(r: PeriodRow): Period {
@@ -187,30 +212,51 @@ export const getSnapshot = createServerFn({ method: "GET" })
     const sql = await getSql();
     const uid = context.userId;
 
-    const semesters = await sql<SemesterRow>`select id, course_name, semester_name, start_date, is_active, classes_over from semesters where user_id = ${uid} order by created_at desc`;
+    const [terms, semesters] = await Promise.all([
+      sql<TermRow>`select id, name, start_date, end_date, is_active, classes_over from terms where user_id = ${uid} order by created_at desc`,
+      sql<SemesterRow>`select id, term_id, course_name, semester_name, start_date, is_active, classes_over from semesters where user_id = ${uid} order by created_at desc`,
+    ]);
     const activeSem = semesters.find((s) => s.is_active) ?? semesters[0];
-    const activeSemId = activeSem?.id;
+    const activeTerm =
+      terms.find((t) => t.is_active) ??
+      (activeSem?.term_id ? terms.find((t) => t.id === activeSem.term_id) : null) ??
+      terms[0] ??
+      null;
+
+    // If active routine has a term_id, use that term.
+    // If active routine has NO term_id (or no terms), targetTermId is null (implicit term).
+    const targetTermId = activeSem ? activeSem.term_id : (activeTerm ? activeTerm.id : null);
+    const hasRoutines = semesters.length > 0;
 
     const [profiles, subjects, periods, attendance, credits, activities, holidays] =
       await Promise.all([
-        sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, timezone, (avatar_data is not null) as has_avatar, deletion_requested_at, scheduled_deletion_date from profiles where user_id = ${uid}`,
-        activeSemId
-          ? sql<SubjectRow>`select id, semester_id, name, code, default_teacher, description, closed from subjects where user_id = ${uid} and semester_id = ${activeSemId} order by created_at`
+        sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, timezone, session, (avatar_data is not null) as has_avatar, deletion_requested_at, scheduled_deletion_date from profiles where user_id = ${uid}`,
+        hasRoutines
+          ? targetTermId
+            ? sql<SubjectRow>`select s.id, s.semester_id, s.name, s.code, s.default_teacher, s.description, s.closed, s.origin_subject_id from subjects s join semesters sem on s.semester_id = sem.id where s.user_id = ${uid} and sem.term_id = ${targetTermId} order by s.created_at`
+            : sql<SubjectRow>`select s.id, s.semester_id, s.name, s.code, s.default_teacher, s.description, s.closed, s.origin_subject_id from subjects s join semesters sem on s.semester_id = sem.id where s.user_id = ${uid} and sem.term_id is null order by s.created_at`
           : Promise.resolve([]),
-        activeSemId
-          ? sql<PeriodRow>`select id, semester_id, subject_id, day_of_week, period_number, start_time, end_time, teacher_name from periods where user_id = ${uid} and semester_id = ${activeSemId} order by day_of_week, period_number`
+        hasRoutines
+          ? targetTermId
+            ? sql<PeriodRow>`select p.id, p.semester_id, p.subject_id, p.day_of_week, p.period_number, p.start_time, p.end_time, p.teacher_name from periods p join semesters sem on p.semester_id = sem.id where p.user_id = ${uid} and sem.term_id = ${targetTermId} order by p.day_of_week, p.period_number`
+            : sql<PeriodRow>`select p.id, p.semester_id, p.subject_id, p.day_of_week, p.period_number, p.start_time, p.end_time, p.teacher_name from periods p join semesters sem on p.semester_id = sem.id where p.user_id = ${uid} and sem.term_id is null order by p.day_of_week, p.period_number`
           : Promise.resolve([]),
-        activeSemId
-          ? sql<AttendanceRow>`select a.id, a.period_id, a.date, a.status from attendance a join periods p on a.period_id = p.id where a.user_id = ${uid} and p.semester_id = ${activeSemId}`
+        hasRoutines
+          ? targetTermId
+            ? sql<AttendanceRow>`select a.id, a.period_id, a.date, a.status from attendance a join periods p on a.period_id = p.id join semesters sem on p.semester_id = sem.id where a.user_id = ${uid} and sem.term_id = ${targetTermId}`
+            : sql<AttendanceRow>`select a.id, a.period_id, a.date, a.status from attendance a join periods p on a.period_id = p.id join semesters sem on p.semester_id = sem.id where a.user_id = ${uid} and sem.term_id is null`
           : Promise.resolve([]),
-        activeSemId
-          ? sql<CreditRow>`select c.id, c.subject_id, c.amount, c.type, c.teacher_name, c.granted_on, c.note from credit_grants c join subjects s on c.subject_id = s.id where c.user_id = ${uid} and s.semester_id = ${activeSemId} order by c.granted_on desc`
+        hasRoutines
+          ? targetTermId
+            ? sql<CreditRow>`select c.id, c.subject_id, c.amount, c.type, c.teacher_name, c.granted_on, c.note from credit_grants c join subjects s on c.subject_id = s.id join semesters sem on s.semester_id = sem.id where c.user_id = ${uid} and sem.term_id = ${targetTermId} order by c.granted_on desc`
+            : sql<CreditRow>`select c.id, c.subject_id, c.amount, c.type, c.teacher_name, c.granted_on, c.note from credit_grants c join subjects s on c.subject_id = s.id join semesters sem on s.semester_id = sem.id where c.user_id = ${uid} and sem.term_id is null order by c.granted_on desc`
           : Promise.resolve([]),
         sql<ActivityRow>`select id, kind, name, activity_date, start_time, end_time, description, credits from activities where user_id = ${uid} order by activity_date desc, start_time desc`,
         sql<HolidayRow>`select id, name, start_date, end_date from holidays where user_id = ${uid} order by start_date desc`,
       ]);
     return {
       profile: profiles[0] ? mapProfile(profiles[0]) : null,
+      terms: terms.map(mapTerm),
       semesters: semesters.map(mapSemester),
       subjects: subjects.map(mapSubject),
       periods: periods.map(mapPeriod),
@@ -226,11 +272,12 @@ export const getFullBackup = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<Snapshot> => {
     const sql = await getSql();
     const uid = context.userId;
-    const [profiles, semesters, subjects, periods, attendance, credits, activities, holidays] =
+    const [profiles, terms, semesters, subjects, periods, attendance, credits, activities, holidays] =
       await Promise.all([
-        sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, timezone, (avatar_data is not null) as has_avatar, deletion_requested_at, scheduled_deletion_date from profiles where user_id = ${uid}`,
-        sql<SemesterRow>`select id, course_name, semester_name, start_date, is_active, classes_over from semesters where user_id = ${uid} order by created_at desc`,
-        sql<SubjectRow>`select id, semester_id, name, code, default_teacher, description, closed from subjects where user_id = ${uid} order by created_at`,
+        sql<ProfileRow>`select student_name, student_id, college_name, threshold_percent, timezone, session, (avatar_data is not null) as has_avatar, deletion_requested_at, scheduled_deletion_date from profiles where user_id = ${uid}`,
+        sql<TermRow>`select id, name, start_date, end_date, is_active, classes_over from terms where user_id = ${uid} order by created_at desc`,
+        sql<SemesterRow>`select id, term_id, course_name, semester_name, start_date, is_active, classes_over from semesters where user_id = ${uid} order by created_at desc`,
+        sql<SubjectRow>`select id, semester_id, name, code, default_teacher, description, closed, origin_subject_id from subjects where user_id = ${uid} order by created_at`,
         sql<PeriodRow>`select id, semester_id, subject_id, day_of_week, period_number, start_time, end_time, teacher_name from periods where user_id = ${uid} order by day_of_week, period_number`,
         sql<AttendanceRow>`select id, period_id, date, status from attendance where user_id = ${uid}`,
         sql<CreditRow>`select id, subject_id, amount, type, teacher_name, granted_on, note from credit_grants where user_id = ${uid} order by granted_on desc`,
@@ -239,6 +286,7 @@ export const getFullBackup = createServerFn({ method: "GET" })
       ]);
     return {
       profile: profiles[0] ? mapProfile(profiles[0]) : null,
+      terms: terms.map(mapTerm),
       semesters: semesters.map(mapSemester),
       subjects: subjects.map(mapSubject),
       periods: periods.map(mapPeriod),
@@ -249,6 +297,25 @@ export const getFullBackup = createServerFn({ method: "GET" })
     };
   });
 
+export function isValidSession(val: string): boolean {
+  const s = val.trim();
+  if (!s) return true;
+  const mFull = s.match(/^(\d{4})\s*[-–]\s*(\d{4})$/);
+  if (mFull) {
+    const start = parseInt(mFull[1], 10);
+    const end = parseInt(mFull[2], 10);
+    return end > start;
+  }
+  const mShort = s.match(/^(\d{4})\s*[-–]\s*(\d{2})$/);
+  if (mShort) {
+    const start = parseInt(mShort[1], 10);
+    const startCentury = Math.floor(start / 100) * 100;
+    const end = startCentury + parseInt(mShort[2], 10);
+    return end > start;
+  }
+  return false;
+}
+
 const profileInput = z.object({
   studentName: z.string().trim().min(1).max(120),
   studentId: z.string().trim().min(1).max(80),
@@ -256,6 +323,16 @@ const profileInput = z.object({
   thresholdPercent: z.number().int().min(50).max(100).optional(),
   // Optional — client sends this silently; never required from user input.
   timezone: z.string().trim().max(60).optional().nullable(),
+  // Academic session / year, e.g. "2025-2027" or "2025-26". Optional, user-editable.
+  session: z
+    .string()
+    .trim()
+    .max(40)
+    .refine((val) => !val || isValidSession(val), {
+      message: "Session must be in format YYYY-YYYY or YYYY-YY (e.g. 2025-2027 or 2025-26).",
+    })
+    .optional()
+    .nullable(),
 });
 
 export const upsertProfile = createServerFn({ method: "POST" })
@@ -268,29 +345,59 @@ export const upsertProfile = createServerFn({ method: "POST" })
     // Only update timezone when explicitly provided (avoid clearing a stored value
     // when the user edits other profile fields from a client that didn't send it).
     const tz = data.timezone ?? null;
+    const sess = data.session !== undefined ? (data.session || null) : undefined;
     if (tz !== null) {
-      await sql`
-        insert into profiles (user_id, student_name, student_id, college_name, threshold_percent, timezone, updated_at)
-        values (${uid}, ${data.studentName}, ${data.studentId}, ${data.collegeName}, ${threshold}, ${tz}, now())
-        on conflict (user_id) do update set
-          student_name = excluded.student_name,
-          student_id = excluded.student_id,
-          college_name = excluded.college_name,
-          threshold_percent = excluded.threshold_percent,
-          timezone = excluded.timezone,
-          updated_at = now()
-      `;
+      if (sess !== undefined) {
+        await sql`
+          insert into profiles (user_id, student_name, student_id, college_name, threshold_percent, timezone, session, updated_at)
+          values (${uid}, ${data.studentName}, ${data.studentId}, ${data.collegeName}, ${threshold}, ${tz}, ${sess}, now())
+          on conflict (user_id) do update set
+            student_name = excluded.student_name,
+            student_id = excluded.student_id,
+            college_name = excluded.college_name,
+            threshold_percent = excluded.threshold_percent,
+            timezone = excluded.timezone,
+            session = excluded.session,
+            updated_at = now()
+        `;
+      } else {
+        await sql`
+          insert into profiles (user_id, student_name, student_id, college_name, threshold_percent, timezone, updated_at)
+          values (${uid}, ${data.studentName}, ${data.studentId}, ${data.collegeName}, ${threshold}, ${tz}, now())
+          on conflict (user_id) do update set
+            student_name = excluded.student_name,
+            student_id = excluded.student_id,
+            college_name = excluded.college_name,
+            threshold_percent = excluded.threshold_percent,
+            timezone = excluded.timezone,
+            updated_at = now()
+        `;
+      }
     } else {
-      await sql`
-        insert into profiles (user_id, student_name, student_id, college_name, threshold_percent, updated_at)
-        values (${uid}, ${data.studentName}, ${data.studentId}, ${data.collegeName}, ${threshold}, now())
-        on conflict (user_id) do update set
-          student_name = excluded.student_name,
-          student_id = excluded.student_id,
-          college_name = excluded.college_name,
-          threshold_percent = excluded.threshold_percent,
-          updated_at = now()
-      `;
+      if (sess !== undefined) {
+        await sql`
+          insert into profiles (user_id, student_name, student_id, college_name, threshold_percent, session, updated_at)
+          values (${uid}, ${data.studentName}, ${data.studentId}, ${data.collegeName}, ${threshold}, ${sess}, now())
+          on conflict (user_id) do update set
+            student_name = excluded.student_name,
+            student_id = excluded.student_id,
+            college_name = excluded.college_name,
+            threshold_percent = excluded.threshold_percent,
+            session = excluded.session,
+            updated_at = now()
+        `;
+      } else {
+        await sql`
+          insert into profiles (user_id, student_name, student_id, college_name, threshold_percent, updated_at)
+          values (${uid}, ${data.studentName}, ${data.studentId}, ${data.collegeName}, ${threshold}, now())
+          on conflict (user_id) do update set
+            student_name = excluded.student_name,
+            student_id = excluded.student_id,
+            college_name = excluded.college_name,
+            threshold_percent = excluded.threshold_percent,
+            updated_at = now()
+        `;
+      }
     }
     return { ok: true as const };
   });
@@ -308,13 +415,197 @@ export const updateTimezone = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
-const semesterInput = z.object({
+const termInput = z.object({
   id: z.string().optional(),
+  name: z.string().trim().min(1).max(160),
+  startDate: z.string().nullable().optional(),
+  endDate: z.string().nullable().optional(),
+  makeActive: z.boolean().optional(),
+});
+
+export const upsertTerm = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: unknown) => termInput.parse(d))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const uid = context.userId;
+    const id = data.id ?? newId();
+    const start = data.startDate || null;
+    const end = data.endDate || null;
+    if (data.id) {
+      // Updating an existing term: only touch name/dates.
+      // Only switch active term when makeActive is explicitly true.
+      if (data.makeActive === true) {
+        await sql`update terms set is_active = false where user_id = ${uid}`;
+      }
+      // Single UPDATE — is_active only flips to true when makeActive===true;
+      // otherwise the CASE leaves the existing column value untouched.
+      await sql`
+        update terms
+        set name       = ${data.name},
+            start_date = ${start},
+            end_date   = ${end},
+            is_active  = case when ${data.makeActive === true}::boolean
+                              then true
+                              else is_active
+                         end
+        where id = ${id} and user_id = ${uid}
+      `;
+    } else {
+      // Creating a new term always activates it (deactivate all others first).
+      await sql`update terms set is_active = false where user_id = ${uid}`;
+      await sql`
+        insert into terms (id, user_id, name, start_date, end_date, is_active)
+        values (${id}, ${uid}, ${data.name}, ${start}, ${end}, true)
+      `;
+    }
+    return { id };
+  });
+
+export const setTermClassesOver = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: unknown) =>
+    z.object({ id: z.string(), classesOver: z.boolean() }).parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await sql`
+      update terms set classes_over = ${data.classesOver}
+      where id = ${data.id} and user_id = ${context.userId}
+    `;
+    return { ok: true as const };
+  });
+
+export const moveRoutineToTerm = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: unknown) =>
+    z.object({ routineId: z.string(), termId: z.string().nullable() }).parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await sql`
+      update semesters set term_id = ${data.termId}
+      where id = ${data.routineId} and user_id = ${context.userId}
+    `;
+    return { ok: true as const };
+  });
+
+export const deleteSemester = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: unknown) => z.object({ id: z.string() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const uid = context.userId;
+
+    // Fetch the routine to be deleted.
+    const [target] = await sql<SemesterRow>`
+      select id, term_id, course_name, semester_name, start_date, is_active, classes_over
+      from semesters where id = ${data.id} and user_id = ${uid}
+    `;
+    if (!target) throw new Error("Routine not found.");
+
+    // If it belongs to a term, check that it is not the last routine.
+    if (target.term_id) {
+      const siblings = await sql<{ id: string; is_active: boolean }>`
+        select id, is_active from semesters
+        where term_id = ${target.term_id} and user_id = ${uid}
+        order by created_at desc
+      `;
+      if (siblings.length <= 1) {
+        throw new Error(
+          "Cannot delete the last routine in a semester. Delete the semester instead, or add another routine first.",
+        );
+      }
+      // If the routine being deleted is active, activate the most-recent sibling.
+      if (Boolean(target.is_active)) {
+        const nextActive = siblings.find((s) => s.id !== data.id);
+        if (nextActive) {
+          await sql`update semesters set is_active = false where user_id = ${uid}`;
+          await sql`update semesters set is_active = true where id = ${nextActive.id} and user_id = ${uid}`;
+        }
+      }
+    }
+
+    await sql`delete from semesters where id = ${data.id} and user_id = ${uid}`;
+    return { ok: true as const };
+  });
+
+export const deleteTerm = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: unknown) =>
+    z.object({ id: z.string(), deleteRoutines: z.boolean().optional() }).parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const uid = context.userId;
+    if (data.deleteRoutines) {
+      await sql`delete from semesters where term_id = ${data.id} and user_id = ${uid}`;
+    } else {
+      const remaining = await sql<{ id: string }>`select id from semesters where term_id = ${data.id} and user_id = ${uid} limit 1`;
+      if (remaining.length > 0) {
+        throw new Error("Cannot delete semester that contains routines without confirmation.");
+      }
+    }
+    await sql`delete from terms where id = ${data.id} and user_id = ${uid}`;
+    return { ok: true as const };
+  });
+
+export const setActiveTerm = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((d: unknown) => z.object({ id: z.string() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const uid = context.userId;
+
+    // Verify the term exists and has at least one routine.
+    const routines = await sql<{ id: string }>`
+      select id from semesters
+      where term_id = ${data.id} and user_id = ${uid}
+      order by created_at desc
+    `;
+    if (routines.length === 0) {
+      throw new Error("This semester has no routines. Add a routine before switching to it.");
+    }
+
+    // Activate the term.
+    await sql`update terms set is_active = false where user_id = ${uid}`;
+    await sql`update terms set is_active = true where id = ${data.id} and user_id = ${uid}`;
+
+    // Check if the currently-active routine already belongs to this term.
+    const alreadyActiveInTerm = await sql<{ id: string }>`
+      select id from semesters
+      where term_id = ${data.id} and user_id = ${uid} and is_active = true
+      limit 1
+    `;
+    if (alreadyActiveInTerm.length === 0) {
+      // Activate the most recently created routine of this term.
+      const mostRecent = routines[0];
+      await sql`update semesters set is_active = false where user_id = ${uid}`;
+      await sql`update semesters set is_active = true where id = ${mostRecent.id} and user_id = ${uid}`;
+    }
+
+    return { ok: true as const };
+  });
+
+// Two shapes: create requires courseName; edit only requires semesterName (and id).
+// Everything else is optional in both shapes.
+const semesterCreateInput = z.object({
+  id: z.undefined().optional(),
+  termId: z.string().optional().nullable(),
   courseName: z.string().trim().min(1).max(160),
   semesterName: z.string().trim().min(1).max(80),
   startDate: z.string().nullable().optional(),
   makeActive: z.boolean().optional(),
 });
+const semesterEditInput = z.object({
+  id: z.string(),
+  termId: z.string().optional().nullable(), // undefined = leave unchanged; null = detach
+  courseName: z.string().trim().min(1).max(160).optional(),
+  semesterName: z.string().trim().min(1).max(80),
+  startDate: z.string().nullable().optional(), // undefined = leave unchanged
+  makeActive: z.boolean().optional(),
+});
+const semesterInput = z.union([semesterEditInput, semesterCreateInput]);
 
 export const upsertSemester = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
@@ -323,22 +614,55 @@ export const upsertSemester = createServerFn({ method: "POST" })
     const sql = await getSql();
     const uid = context.userId;
     const id = data.id ?? newId();
-    const start = data.startDate || null;
-    if (data.makeActive !== false) {
-      await sql`update semesters set is_active = false where user_id = ${uid}`;
-    }
+
     if (data.id) {
+      // ── EDIT ────────────────────────────────────────────────────────────────
+      // Deactivate all other routines only when makeActive is explicitly true.
+      if (data.makeActive === true) {
+        await sql`update semesters set is_active = false where user_id = ${uid}`;
+      }
+
+      // Flags: undefined means "leave column unchanged"; presence (even null) means update.
+      const hasCourse  = data.courseName !== undefined;
+      const hasTermId  = data.termId    !== undefined;
+      const hasStart   = data.startDate !== undefined;
+      const start      = data.startDate || null;
+      const termId     = data.termId   ?? null;
+      const courseName = data.courseName ?? null;
+
+      // Single UPDATE — no nested sql`` fragments.
+      // COALESCE(new_value, old_column) only works when we want null-to-keep.
+      // For optional fields we use CASE WHEN flag::boolean THEN new ELSE old END.
       await sql`
         update semesters
-        set course_name = ${data.courseName},
-            semester_name = ${data.semesterName},
-            start_date = ${start}
+        set
+          semester_name = ${data.semesterName},
+          course_name   = case when ${hasCourse}::boolean
+                               then ${courseName}::text
+                               else course_name
+                          end,
+          start_date    = case when ${hasStart}::boolean
+                               then ${start}::date
+                               else start_date
+                          end,
+          term_id       = case when ${hasTermId}::boolean
+                               then ${termId}::text
+                               else term_id
+                          end,
+          is_active     = case when ${data.makeActive === true}::boolean
+                               then true
+                               else is_active
+                          end
         where id = ${id} and user_id = ${uid}
       `;
     } else {
+      // ── CREATE: always activates the new routine ──
+      const termId = data.termId ?? null;
+      const start = data.startDate || null;
+      await sql`update semesters set is_active = false where user_id = ${uid}`;
       await sql`
-        insert into semesters (id, user_id, course_name, semester_name, start_date, is_active)
-        values (${id}, ${uid}, ${data.courseName}, ${data.semesterName}, ${start}, true)
+        insert into semesters (id, user_id, term_id, course_name, semester_name, start_date, is_active)
+        values (${id}, ${uid}, ${termId}, ${data.courseName}, ${data.semesterName}, ${start}, true)
       `;
     }
     return { id };
@@ -493,10 +817,21 @@ export const markAttendance = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const uid = context.userId;
-    const owned = await sql<{ id: string }>`
-      select id from periods where id = ${data.periodId} and user_id = ${uid}
+    const owned = await sql<{
+      id: string;
+      term_classes_over: boolean | null;
+      sem_classes_over: boolean;
+    }>`
+      select p.id, t.classes_over as term_classes_over, s.classes_over as sem_classes_over
+      from periods p
+      join semesters s on p.semester_id = s.id
+      left join terms t on s.term_id = t.id
+      where p.id = ${data.periodId} and p.user_id = ${uid}
     `;
     if (!owned[0]) throw new Error("Period not found.");
+    if (owned[0].term_classes_over ?? owned[0].sem_classes_over) {
+      throw new Error("Classes are over for this semester.");
+    }
     const id = newId();
     await sql`
       insert into attendance (id, user_id, period_id, date, status)
@@ -521,6 +856,21 @@ export const markDayStatus = createServerFn({ method: "POST" })
     const sql = await getSql();
     const uid = context.userId;
     for (const periodId of data.periodIds) {
+      const owned = await sql<{
+        id: string;
+        term_classes_over: boolean | null;
+        sem_classes_over: boolean;
+      }>`
+        select p.id, t.classes_over as term_classes_over, s.classes_over as sem_classes_over
+        from periods p
+        join semesters s on p.semester_id = s.id
+        left join terms t on s.term_id = t.id
+        where p.id = ${periodId} and p.user_id = ${uid}
+      `;
+      if (!owned[0]) throw new Error("Period not found.");
+      if (owned[0].term_classes_over ?? owned[0].sem_classes_over) {
+        throw new Error("Classes are over for this semester.");
+      }
       const id = newId();
       await sql`
         insert into attendance (id, user_id, period_id, date, status)
@@ -582,13 +932,22 @@ export const addCreditGrant = createServerFn({ method: "POST" })
 const archiveRoutineInput = z.object({
   semesterId: z.string(),
   newSemesterName: z.string().trim().min(1).max(80),
+  /**
+   * If provided, the new routine is associated with this term.
+   * Pass the same termId as the current routine to keep them in the same term,
+   * or a different termId to start a new term's first routine.
+   * Omit to leave the new routine unlinked (legacy behaviour).
+   */
+  termId: z.string().optional().nullable(),
 });
 
 /**
  * Archives the current semester's routine by:
- * 1. Marking the current semester inactive and classesOver=true
- * 2. Creating a new semester (same courseName, new semesterName) as active
+ * 1. Marking the current routine inactive (does NOT set classes_over)
+ * 2. Creating a new routine (same courseName, new semesterName) as active
  * 3. Copying all subjects across (no periods — blank slate for the new routine)
+ *    — each new subject records originSubjectId pointing at its source, enabling
+ *    term-wide attendance aggregation across routines.
  * Returns the new semester id and a map of old→new subject ids.
  */
 export const archiveRoutine = createServerFn({ method: "POST" })
@@ -600,40 +959,49 @@ export const archiveRoutine = createServerFn({ method: "POST" })
 
     // Fetch current semester
     const [sem] = await sql<SemesterRow>`
-      select id, course_name, semester_name, start_date, is_active, classes_over
+      select id, term_id, course_name, semester_name, start_date, is_active, classes_over
       from semesters where id = ${data.semesterId} and user_id = ${uid}
     `;
     if (!sem) throw new Error("Semester not found.");
 
     // Fetch subjects for this semester
     const subjects = await sql<SubjectRow>`
-      select id, semester_id, name, code, default_teacher, description, closed
+      select id, semester_id, name, code, default_teacher, description, closed, origin_subject_id
       from subjects where semester_id = ${data.semesterId} and user_id = ${uid}
       order by created_at
     `;
 
-    // Archive old semester
+    // Inactivate old routine (do NOT set classes_over)
     await sql`
       update semesters
-      set is_active = false, classes_over = true
+      set is_active = false
       where id = ${data.semesterId} and user_id = ${uid}
     `;
+
+    // Determine term for the new routine:
+    // use explicitly supplied termId, or inherit from the archived semester.
+    const newTermId = data.termId !== undefined ? (data.termId ?? null) : (sem.term_id ?? null);
 
     // Create new active semester
     const newSemId = newId();
     await sql`
-      insert into semesters (id, user_id, course_name, semester_name, start_date, is_active)
-      values (${newSemId}, ${uid}, ${sem.course_name}, ${data.newSemesterName}, now()::date, true)
+      insert into semesters (id, user_id, term_id, course_name, semester_name, start_date, is_active)
+      values (${newSemId}, ${uid}, ${newTermId}, ${sem.course_name}, ${data.newSemesterName}, now()::date, true)
     `;
 
-    // Copy subjects (reset closed flag, no periods)
+    // Copy subjects (reset closed flag, no periods).
+    // Set origin_subject_id to the canonical origin of each subject so that
+    // term-wide aggregation can follow the chain across multiple archives.
     const idMap: Record<string, string> = {};
     for (const s of subjects) {
       const newSubId = newId();
       idMap[s.id] = newSubId;
+      // origin_subject_id = the root of the lineage (if s itself was already a
+      // copy, its origin_subject_id already points to the root; otherwise s.id is the root).
+      const originId = s.origin_subject_id ?? s.id;
       await sql`
-        insert into subjects (id, user_id, semester_id, name, code, default_teacher, description)
-        values (${newSubId}, ${uid}, ${newSemId}, ${s.name}, ${s.code}, ${s.default_teacher}, ${s.description ?? null})
+        insert into subjects (id, user_id, semester_id, name, code, default_teacher, description, origin_subject_id)
+        values (${newSubId}, ${uid}, ${newSemId}, ${s.name}, ${s.code}, ${s.default_teacher}, ${s.description ?? null}, ${originId})
       `;
     }
 
@@ -797,9 +1165,22 @@ export const deleteAvatarData = createServerFn({ method: "POST" })
 const importSchema = z.object({
   version: z.literal(1),
   profile: profileInput.nullable(),
+  terms: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        startDate: z.string().nullable().optional(),
+        endDate: z.string().nullable().optional(),
+        isActive: z.boolean(),
+        classesOver: z.boolean().optional(),
+      }),
+    )
+    .default([]),
   semesters: z.array(
     z.object({
       id: z.string(),
+      termId: z.string().nullable().optional(),
       courseName: z.string(),
       semesterName: z.string(),
       startDate: z.string().nullable(),
@@ -816,6 +1197,7 @@ const importSchema = z.object({
       defaultTeacher: z.string().nullable(),
       description: z.string().nullable().optional(),
       closed: z.boolean(),
+      originSubjectId: z.string().nullable().optional(),
     }),
   ),
   periods: z.array(
@@ -888,25 +1270,32 @@ export const importSnapshot = createServerFn({ method: "POST" })
     await sql`delete from periods where user_id = ${uid}`;
     await sql`delete from subjects where user_id = ${uid}`;
     await sql`delete from semesters where user_id = ${uid}`;
+    await sql`delete from terms where user_id = ${uid}`;
     await sql`delete from profiles where user_id = ${uid}`;
 
     if (data.profile) {
       const t = data.profile.thresholdPercent ?? 75;
       await sql`
-        insert into profiles (user_id, student_name, student_id, college_name, threshold_percent)
-        values (${uid}, ${data.profile.studentName}, ${data.profile.studentId}, ${data.profile.collegeName}, ${t})
+        insert into profiles (user_id, student_name, student_id, college_name, threshold_percent, timezone, session)
+        values (${uid}, ${data.profile.studentName}, ${data.profile.studentId}, ${data.profile.collegeName}, ${t}, ${data.profile.timezone ?? null}, ${data.profile.session ?? null})
+      `;
+    }
+    for (const t of data.terms) {
+      await sql`
+        insert into terms (id, user_id, name, start_date, end_date, is_active, classes_over)
+        values (${t.id}, ${uid}, ${t.name}, ${t.startDate ?? null}, ${t.endDate ?? null}, ${t.isActive}, ${t.classesOver ?? false})
       `;
     }
     for (const s of data.semesters) {
       await sql`
-        insert into semesters (id, user_id, course_name, semester_name, start_date, is_active, classes_over)
-        values (${s.id}, ${uid}, ${s.courseName}, ${s.semesterName}, ${s.startDate}, ${s.isActive}, ${s.classesOver})
+        insert into semesters (id, user_id, term_id, course_name, semester_name, start_date, is_active, classes_over)
+        values (${s.id}, ${uid}, ${s.termId ?? null}, ${s.courseName}, ${s.semesterName}, ${s.startDate}, ${s.isActive}, ${s.classesOver})
       `;
     }
     for (const s of data.subjects) {
       await sql`
-        insert into subjects (id, user_id, semester_id, name, code, default_teacher, description, closed)
-        values (${s.id}, ${uid}, ${s.semesterId}, ${s.name}, ${s.code}, ${s.defaultTeacher}, ${s.description ?? null}, ${s.closed})
+        insert into subjects (id, user_id, semester_id, name, code, default_teacher, description, closed, origin_subject_id)
+        values (${s.id}, ${uid}, ${s.semesterId}, ${s.name}, ${s.code}, ${s.defaultTeacher}, ${s.description ?? null}, ${s.closed}, ${s.originSubjectId ?? null})
       `;
     }
     for (const p of data.periods) {

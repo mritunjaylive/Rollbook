@@ -64,8 +64,11 @@ export function AppShell({
   if (!profile && pathname !== "/setup") return <Navigate to="/setup" />;
 
   const active = selectActive(snapshot);
+  const termName = active.term?.name ?? active.semester?.semesterName;
   const subtitle = active.semester
-    ? `${active.semester.courseName} · ${active.semester.semesterName}`
+    ? active.routines.length > 1
+      ? `${active.semester.courseName} · ${termName} · ${active.semester.semesterName}`
+      : `${active.semester.courseName} · ${termName}`
     : profile
       ? profile.collegeName
       : "Set up your roll";

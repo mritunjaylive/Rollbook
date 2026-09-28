@@ -70,8 +70,16 @@ function CalendarPage() {
   const future = isAfter(parseISODate(selectedIso), parseISODate(todayIso));
   const monthStart = date ? startOfMonth(date) : parseISODate(selectedIso);
   const inMonth = (d: Date) => d.getMonth() === monthStart.getMonth();
+  const classesOver = Boolean(active.term?.classesOver ?? active.semester?.classesOver);
+  const matchingHoliday = snapshot?.holidays?.find(
+    (h) => h.startDate <= selectedIso && selectedIso <= h.endDate,
+  );
 
   async function mark(periodId: string, status: AttendanceStatus) {
+    if (classesOver) {
+      toast.error("Classes are over for this semester. Attendance marking is closed.");
+      return;
+    }
     try {
       await mut.markAttendance.mutateAsync({ periodId, date: selectedIso, status });
     } catch (err) {
@@ -141,7 +149,7 @@ function CalendarPage() {
           <h2 className="font-display text-xl font-semibold">
             {format(selectedDate, "EEEE d MMM")}
           </h2>
-          {periods.length > 0 && !future ? (
+          {periods.length > 0 && !future && !classesOver ? (
             <Button
               size="sm"
               variant="ghost"
@@ -157,27 +165,48 @@ function CalendarPage() {
             </Button>
           ) : null}
         </div>
+        {classesOver && (
+          <p className="mb-3 rounded-[var(--radius-md)] bg-warn-soft px-3 py-2 text-sm text-warn">
+            Classes are over for this semester. Attendance marking is closed.
+          </p>
+        )}
+        {matchingHoliday && (
+          <p className="mb-3 rounded-[var(--radius-md)] bg-line/50 px-3 py-2 text-xs font-medium text-ink-soft">
+            Holiday: {matchingHoliday.name}
+          </p>
+        )}
         {jsDay === 0 ? (
           <p className="text-sm text-ink-soft">Sunday — no routine.</p>
         ) : periods.length === 0 ? (
           <p className="text-sm text-ink-soft">No periods on {weekdayName(jsDay)}.</p>
-        ) : future ? (
-          <p className="text-sm text-ink-soft">Future days can be seen, not marked.</p>
         ) : (
           <ul className="space-y-3">
             {periods.map((p) => {
               const subject = active.subjects.find((s) => s.id === p.subjectId);
+              const teacher = p.teacherName || subject?.defaultTeacher || "No teacher set";
               return (
                 <li key={p.id}>
                   <Card>
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-faint">
-                      Period {p.periodNumber} · {p.startTime}–{p.endTime}
-                    </p>
-                    <p className="mb-3 font-medium">{subject?.name ?? "Subject"}</p>
-                    <MarkPad
-                      value={marks.get(p.id) ?? null}
-                      onChange={(s) => void mark(p.id, s)}
-                    />
+                    <div className="mb-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-faint">
+                        Period {p.periodNumber} · {p.startTime}–{p.endTime}
+                      </p>
+                      <p className="font-medium text-ink">{subject?.name ?? "Subject"}</p>
+                      <p className="text-sm text-ink-soft">{teacher}</p>
+                    </div>
+                    {future ? (
+                      <p className="mt-2 text-xs text-ink-faint">
+                        Upcoming — can be marked on the day
+                      </p>
+                    ) : (
+                      <div className="mt-3">
+                        <MarkPad
+                          value={marks.get(p.id) ?? null}
+                          onChange={(s) => void mark(p.id, s)}
+                          disabled={classesOver || Boolean(subject?.closed) || mut.markAttendance.isPending}
+                        />
+                      </div>
+                    )}
                   </Card>
                 </li>
               );

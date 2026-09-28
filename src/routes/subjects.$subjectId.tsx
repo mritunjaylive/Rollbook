@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { CREDIT_TYPES, WEEKDAYS, weekdayName } from "@/lib/rollbook/days";
-import { mostRecentTeacherForSubject, statsForSubject, teacherNamesForSubject } from "@/lib/rollbook/derive";
+import { groupSubjectsByOrigin, mostRecentTeacherForSubject, statsForSubject, statsForSubjectGroup, teacherNamesForSubject, teachersForSubjectGroup } from "@/lib/rollbook/derive";
 import { selectActive, useRollbookMutations, useSnapshot } from "@/lib/rollbook/queries";
 import { computeStats, projectedCredit } from "@/lib/rollbook/stats";
 import type { AttendanceStats, Period, Subject } from "@/lib/rollbook/types";
@@ -46,11 +46,14 @@ function SubjectDetailPage() {
     );
   }
 
-  const stats = statsForSubject(snapshot, subject.id, threshold);
-  const credits = snapshot.credits.filter((c) => c.subjectId === subject.id);
+  const groups = Array.from(groupSubjectsByOrigin(snapshot).values());
+  const group = groups.find((g) => g.some((s) => s.id === subject.id)) ?? [subject];
+  const stats = statsForSubjectGroup(snapshot, group, threshold);
+  const groupSubjectIds = new Set(group.map((s) => s.id));
+  const credits = snapshot.credits.filter((c) => groupSubjectIds.has(c.subjectId));
 
-  // All periods for this subject, sorted by day then period number
-  const subjectPeriods = snapshot.periods
+  // All periods for this subject in the active routine, sorted by day then period number
+  const subjectPeriods = active.periods
     .filter((p) => p.subjectId === subject.id)
     .sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.periodNumber - b.periodNumber);
 
@@ -62,16 +65,19 @@ function SubjectDetailPage() {
     byDay.set(p.dayOfWeek, list);
   }
 
-  const periodIds = new Set(subjectPeriods.map((p) => p.id));
+  // Combined attendance history across all routines in the term for this subject group
+  const groupPeriodIds = new Set(
+    snapshot.periods.filter((p) => groupSubjectIds.has(p.subjectId)).map((p) => p.id),
+  );
   const history = snapshot.attendance
-    .filter((a) => periodIds.has(a.periodId))
+    .filter((a) => groupPeriodIds.has(a.periodId))
     .slice()
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
-  const noMore = subject.closed || Boolean(active.semester?.classesOver);
+  const noMore = subject.closed || Boolean(active.term?.classesOver ?? active.semester?.classesOver);
 
-  // Unique teachers across all periods for this subject (kept for the header display)
-  const teachers = teacherNamesForSubject(subjectPeriods, subject);
+  // Unique teachers across all periods and subjects in this group
+  const teachers = teachersForSubjectGroup(snapshot.periods, group);
 
   return (
     <AppShell>
@@ -454,7 +460,7 @@ function PeriodDialog({
   const [copying, setCopying] = useState(false);
   type Slot = { dayOfWeek: number; periodNumber: number };
   const [selectedSlots, setSelectedSlots] = useState<Slot[]>([]);
-  const [copyDay, setCopyDay] = useState(WEEKDAYS[0].n);
+  const [copyDay, setCopyDay] = useState<number>(WEEKDAYS[0].n);
   const [copyPeriodNum, setCopyPeriodNum] = useState(1);
 
   const slotHasPeriod = (day: number, num: number) =>

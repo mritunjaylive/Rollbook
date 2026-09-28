@@ -7,13 +7,35 @@ export type Profile = {
   collegeName: string;
   thresholdPercent: number;
   timezone: string | null;
+  /** Academic session / year, e.g. "2025-26". Optional, user-editable. */
+  session: string | null;
   hasAvatar?: boolean;
   deletionRequestedAt?: string | null;
   scheduledDeletionDate?: string | null;
 };
 
+/**
+ * A Term is the top-level grouping above routines — one per "semester" in the
+ * academic sense (e.g. "Odd Semester 2025-26"). A term contains one or more
+ * Semester (routine) rows in the semesters table.
+ */
+export type Term = {
+  id: string;
+  name: string;
+  startDate: string | null;
+  endDate: string | null;
+  isActive: boolean;
+  classesOver: boolean;
+};
+
+/**
+ * A Semester is a *routine* — a concrete timetable slot arrangement within
+ * a term. One term may have multiple routines (e.g. archive & start fresh).
+ */
 export type Semester = {
   id: string;
+  /** FK to the parent term, if any. Null for legacy rows. */
+  termId: string | null;
   courseName: string;
   semesterName: string;
   startDate: string | null;
@@ -29,6 +51,12 @@ export type Subject = {
   defaultTeacher: string | null;
   description: string | null;
   closed: boolean;
+  /**
+   * When a subject was carried forward from an archived routine via
+   * archiveRoutine(), this field points to its origin subject id. Used for
+   * term-wide attendance aggregation across routines.
+   */
+  originSubjectId: string | null;
 };
 
 export type Period = {
@@ -81,6 +109,7 @@ export type Holiday = {
 
 export type Snapshot = {
   profile: Profile | null;
+  terms: Term[];
   semesters: Semester[];
   subjects: Subject[];
   periods: Period[];

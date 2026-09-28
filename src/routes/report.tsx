@@ -1,12 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { selectActive, useSnapshot } from "@/lib/rollbook/queries";
-import { statsForSubject } from "@/lib/rollbook/derive";
+import {
+  groupSubjectsByOrigin,
+  statsForSubjectGroup,
+  statsForTerm,
+  teachersForSubjectGroup,
+} from "@/lib/rollbook/derive";
 import { Button } from "@/components/ui/button";
 import { FileDown, Printer } from "lucide-react";
 import { localISODate } from "@/lib/utils";
 import { toast } from "sonner";
-
-import { buildCsv } from "@/lib/rollbook/csv";
+import { buildCsv, type CsvReportRow } from "@/lib/rollbook/csv";
 
 export const Route = createFileRoute("/report")({
   component: ReportPage,
@@ -28,24 +32,35 @@ function ReportPage() {
     );
   }
 
-  const overallAttended = active.subjects.reduce((sum, s) => sum + statsForSubject(snapshot, s.id, threshold).present, 0);
-  const overallHeld = active.subjects.reduce((sum, s) => sum + statsForSubject(snapshot, s.id, threshold).hosted, 0);
-  const overallPercent = overallHeld === 0 ? 0 : Math.round((overallAttended / overallHeld) * 100);
+  const activeTerm = active.term;
+  const termRoutines = active.routines.length > 0 ? active.routines : [active.semester];
+  const routineSemesterIds = new Set(termRoutines.map((r) => r.id));
+  const termName = activeTerm?.name ?? active.semester.semesterName;
+  const courseName = termRoutines[0]?.courseName ?? active.semester.courseName;
+
+  // Group subjects across all routines in the term
+  const subjectGroups = Array.from(
+    groupSubjectsByOrigin(snapshot.subjects, routineSemesterIds).values(),
+  );
+
+  // Overall attendance using statsForTerm
+  const overallStats = statsForTerm(snapshot, activeTerm?.id ?? active.semester.termId, threshold);
+  const overallAttended = overallStats.present;
+  const overallHeld = overallStats.hosted;
+  const overallPercent =
+    overallHeld === 0 ? 0 : Math.round((overallAttended / overallHeld) * 100);
 
   function exportCsv() {
     try {
-      const rows = active.subjects.map((s) => {
-        const st = statsForSubject(snapshot!, s.id, threshold);
-        // Collect unique, non-empty teacher names from periods for this subject
-        const teacherSet = new Set<string>();
-        snapshot!.periods
-          .filter((p) => p.subjectId === s.id)
-          .forEach((p) => { if (p.teacherName) teacherSet.add(p.teacherName); });
-        if (s.defaultTeacher) teacherSet.add(s.defaultTeacher);
+      const rows: CsvReportRow[] = subjectGroups.map((group) => {
+        const primary = group[group.length - 1] ?? group[0];
+        const st = statsForSubjectGroup(snapshot!, group, threshold);
+        const teachers = teachersForSubjectGroup(snapshot!.periods, group).join("; ");
+        const code = group.find((s) => s.code)?.code ?? null;
         return {
-          name: s.name,
-          code: s.code,
-          teachers: [...teacherSet].join("; "),
+          name: primary.name,
+          code,
+          teachers,
           held: st.hosted,
           present: st.present,
           absent: st.absent,
@@ -103,8 +118,14 @@ function ReportPage() {
             <p><span className="font-semibold w-24 inline-block">ID / Roll No:</span> {profile?.studentId || "—"}</p>
           </div>
           <div>
-            <p><span className="font-semibold w-24 inline-block">Course:</span> {active.semester.courseName}</p>
-            <p><span className="font-semibold w-24 inline-block">Semester:</span> {active.semester.semesterName}</p>
+            <p><span className="font-semibold w-24 inline-block">Course:</span> {courseName}</p>
+            <p><span className="font-semibold w-24 inline-block">Semester:</span> {termName}</p>
+            {profile?.session ? (
+              <p><span className="font-semibold w-24 inline-block">Session:</span> {profile.session}</p>
+            ) : null}
+            <p className="text-xs text-gray-500 mt-1">
+              Routines included: {termRoutines.map((r) => r.semesterName).join(", ") || "—"}
+            </p>
           </div>
         </div>
 
@@ -131,12 +152,15 @@ function ReportPage() {
             </tr>
           </thead>
           <tbody>
-            {active.subjects.map((s) => {
-              const stats = statsForSubject(snapshot, s.id, threshold);
+            {subjectGroups.map((group) => {
+              const primary = group[group.length - 1] ?? group[0];
+              const stats = statsForSubjectGroup(snapshot, group, threshold);
+              const teacherList = teachersForSubjectGroup(snapshot.periods, group);
+              const teachers = teacherList.join("; ") || "—";
               return (
-                <tr key={s.id} className="border-b border-gray-200">
-                  <td className="py-3 px-4 font-medium">{s.name}</td>
-                  <td className="py-3 px-4 text-gray-600">{s.defaultTeacher || "—"}</td>
+                <tr key={primary.id} className="border-b border-gray-200">
+                  <td className="py-3 px-4 font-medium">{primary.name}</td>
+                  <td className="py-3 px-4 text-gray-600">{teachers}</td>
                   <td className="py-3 px-2 text-right">{stats.hosted}</td>
                   <td className="py-3 px-2 text-right">{stats.present}</td>
                   <td className="py-3 px-2 text-right">{stats.absent}</td>
@@ -147,7 +171,7 @@ function ReportPage() {
                 </tr>
               );
             })}
-            {active.subjects.length === 0 && (
+            {subjectGroups.length === 0 && (
               <tr>
                 <td colSpan={7} className="py-6 text-center text-gray-500">
                   No subjects found in this semester.

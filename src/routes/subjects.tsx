@@ -9,8 +9,9 @@ import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input } from "@/components/ui/input";
 import { weekdayName } from "@/lib/rollbook/days";
-import { statsForSubject } from "@/lib/rollbook/derive";
+import { groupSubjectsByOrigin, statsForSubject, statsForSubjectGroup } from "@/lib/rollbook/derive";
 import { selectActive, useRollbookMutations, useSnapshot } from "@/lib/rollbook/queries";
+import type { Subject } from "@/lib/rollbook/types";
 
 export const Route = createFileRoute("/subjects")({ component: SubjectsPage });
 
@@ -28,6 +29,14 @@ function SubjectsPage() {
   const [code, setCode] = useState("");
   const [teacher, setTeacher] = useState("");
 
+  const groups = snapshot ? Array.from(groupSubjectsByOrigin(snapshot).values()) : [];
+  const groupForSubject = new Map<string, Subject[]>();
+  for (const g of groups) {
+    for (const s of g) {
+      groupForSubject.set(s.id, g);
+    }
+  }
+
   return (
     <AppShell>
       <div className="flex items-start justify-between gap-3">
@@ -35,7 +44,7 @@ function SubjectsPage() {
           <h1 className="font-display text-3xl font-semibold">Subjects</h1>
           <p className="text-sm text-ink-soft">
             {active.semester
-              ? `${active.semester.semesterName} · ${active.semester.courseName}`
+              ? `${active.term?.name ?? active.semester.semesterName} · ${active.semester.courseName}`
               : "No active semester"}
           </p>
         </div>
@@ -62,7 +71,12 @@ function SubjectsPage() {
       ) : (
         <ul className="mt-5 grid gap-3 sm:grid-cols-2">
           {active.subjects.map((s) => {
-            const st = snapshot ? statsForSubject(snapshot, s.id, threshold) : null;
+            const group = groupForSubject.get(s.id);
+            const st = snapshot && group
+              ? statsForSubjectGroup(snapshot, group, threshold)
+              : snapshot
+                ? statsForSubject(snapshot, s.id, threshold)
+                : null;
 
             // Periods for this subject in the active semester
             const periods = active.periods
@@ -257,9 +271,9 @@ function ArchiveRoutineDialog({
       <div className="mb-4 rounded-[var(--radius-md)] bg-paper px-3 py-2.5 text-sm text-ink-soft">
         <p className="font-medium text-ink">What this does</p>
         <ul className="mt-1.5 space-y-1 text-xs">
-          <li>• The current semester ("{currentSemester.semesterName}") is archived — its attendance history is kept.</li>
-          <li>• A new semester is created with the same subjects copied over.</li>
-          <li>• The new semester starts with a <strong>blank timetable</strong> — add your updated routine from scratch.</li>
+          <li>• The current routine ("{currentSemester.semesterName}") is archived — its attendance history is kept.</li>
+          <li>• A new routine is created in this semester with the same subjects copied over.</li>
+          <li>• The new routine starts with a <strong>blank timetable</strong> — add your updated routine from scratch.</li>
           <li>• Teachers, codes, and notes on each subject carry over.</li>
         </ul>
       </div>
@@ -281,7 +295,7 @@ function ArchiveRoutineDialog({
           }
         }}
       >
-        <Field label="Name for the new semester">
+        <Field label="Name for the new routine">
           <Input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}

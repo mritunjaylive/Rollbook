@@ -249,7 +249,7 @@ function PeriodDialog({
   const [copying, setCopying] = useState(false);
   type Slot = { dayOfWeek: number; periodNumber: number };
   const [selectedSlots, setSelectedSlots] = useState<Slot[]>([]);
-  const [copyDay, setCopyDay] = useState(WEEKDAYS[0].n);
+  const [copyDay, setCopyDay] = useState<number>(WEEKDAYS[0].n);
   const [copyPeriodNum, setCopyPeriodNum] = useState(1);
 
   // Teacher autocomplete list for the currently selected subject
